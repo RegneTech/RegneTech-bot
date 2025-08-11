@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands, tasks
-import sqlite3
 import json
 import asyncio
 import time
@@ -13,380 +12,12 @@ import os
 import random
 import logging
 
+# Importar funciones de la base de datos
+import database
+
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-class LevelsDatabase:
-    def __init__(self, db_path="levels.db"):
-        self.db_path = db_path
-        self.init_database()
-    
-    def init_database(self):
-        """Inicializa la base de datos con todas las tablas necesarias"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Tabla principal de usuarios
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS users (
-                user_id INTEGER PRIMARY KEY,
-                guild_id INTEGER,
-                xp INTEGER DEFAULT 0,
-                level INTEGER DEFAULT 1,
-                last_xp_time INTEGER DEFAULT 0,
-                total_messages INTEGER DEFAULT 0,
-                weekly_xp INTEGER DEFAULT 0,
-                monthly_xp INTEGER DEFAULT 0,
-                badges TEXT DEFAULT '[]',
-                join_date INTEGER DEFAULT 0,
-                voice_time INTEGER DEFAULT 0,
-                UNIQUE(user_id, guild_id)
-            )
-        ''')
-        
-        # Tabla de configuración de roles por nivel
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS level_roles (
-                guild_id INTEGER,
-                level INTEGER,
-                role_id INTEGER,
-                PRIMARY KEY (guild_id, level)
-            )
-        ''')
-        
-        # Tabla de configuración del servidor
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS guild_config (
-                guild_id INTEGER PRIMARY KEY,
-                level_up_channel INTEGER,
-                xp_per_message INTEGER DEFAULT 15,
-                xp_cooldown INTEGER DEFAULT 60,
-                enabled_channels TEXT DEFAULT '[]',
-                disabled_channels TEXT DEFAULT '[]',
-                xp_multiplier REAL DEFAULT 1.0,
-                level_formula TEXT DEFAULT 'exponential',
-                voice_xp_enabled INTEGER DEFAULT 0,
-                voice_xp_rate INTEGER DEFAULT 5,
-                bonus_roles TEXT DEFAULT '[]',
-                announce_level_up INTEGER DEFAULT 1,
-                stack_roles INTEGER DEFAULT 0,
-                custom_rewards TEXT DEFAULT '{}'
-            )
-        ''')
-        
-        # Tabla de insignias mejorada
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS badges (
-                badge_id TEXT PRIMARY KEY,
-                name TEXT,
-                description TEXT,
-                emoji TEXT,
-                requirement_type TEXT,
-                requirement_value INTEGER,
-                rarity TEXT DEFAULT 'common',
-                hidden INTEGER DEFAULT 0
-            )
-        ''')
-        
-        # Tabla de recompensas personalizadas
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS custom_rewards (
-                guild_id INTEGER,
-                level INTEGER,
-                reward_type TEXT,
-                reward_data TEXT,
-                PRIMARY KEY (guild_id, level, reward_type)
-            )
-        ''')
-        
-        # Tabla de presencia en voz
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS voice_sessions (
-                user_id INTEGER,
-                guild_id INTEGER,
-                join_time INTEGER,
-                leave_time INTEGER DEFAULT 0,
-                xp_earned INTEGER DEFAULT 0,
-                PRIMARY KEY (user_id, guild_id, join_time)
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
-    
-    def get_user_data(self, user_id, guild_id):
-        """Obtiene los datos de un usuario"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT * FROM users WHERE user_id = ? AND guild_id = ?
-        ''', (user_id, guild_id))
-        
-        result = cursor.fetchone()
-        conn.close()
-        
-        if result:
-            return {
-                'user_id': result[0],
-                'guild_id': result[1],
-                'xp': result[2],
-                'level': result[3],
-                'last_xp_time': result[4],
-                'total_messages': result[5],
-                'weekly_xp': result[6],
-                'monthly_xp': result[7],
-                'badges': json.loads(result[8]),
-                'join_date': result[9],
-                'voice_time': result[10]
-            }
-        return None
-    
-    def update_user_xp(self, user_id, guild_id, xp_gain, weekly_xp=0, monthly_xp=0):
-        """Actualiza la XP de un usuario"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        current_time = int(time.time())
-        
-        cursor.execute('''
-            INSERT OR REPLACE INTO users (
-                user_id, guild_id, xp, level, last_xp_time, total_messages, weekly_xp, monthly_xp, badges, join_date, voice_time
-            ) VALUES (
-                ?, ?, 
-                COALESCE((SELECT xp FROM users WHERE user_id = ? AND guild_id = ?), 0) + ?,
-                COALESCE((SELECT level FROM users WHERE user_id = ? AND guild_id = ?), 1),
-                ?,
-                COALESCE((SELECT total_messages FROM users WHERE user_id = ? AND guild_id = ?), 0) + 1,
-                COALESCE((SELECT weekly_xp FROM users WHERE user_id = ? AND guild_id = ?), 0) + ?,
-                COALESCE((SELECT monthly_xp FROM users WHERE user_id = ? AND guild_id = ?), 0) + ?,
-                COALESCE((SELECT badges FROM users WHERE user_id = ? AND guild_id = ?), '[]'),
-                COALESCE((SELECT join_date FROM users WHERE user_id = ? AND guild_id = ?), ?),
-                COALESCE((SELECT voice_time FROM users WHERE user_id = ? AND guild_id = ?), 0)
-            )
-        ''', (user_id, guild_id, user_id, guild_id, xp_gain, user_id, guild_id, 
-              current_time, user_id, guild_id, user_id, guild_id, weekly_xp, 
-              user_id, guild_id, monthly_xp, user_id, guild_id, user_id, guild_id, 
-              current_time, user_id, guild_id))
-        
-        conn.commit()
-        conn.close()
-    
-    def set_user_xp(self, user_id, guild_id, xp):
-        """Establece la XP exacta de un usuario"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        current_time = int(time.time())
-        
-        cursor.execute('''
-            INSERT OR REPLACE INTO users (user_id, guild_id, xp, level, last_xp_time, total_messages, weekly_xp, monthly_xp, badges, join_date, voice_time)
-            VALUES (?, ?, ?, 1, 0, 
-                COALESCE((SELECT total_messages FROM users WHERE user_id = ? AND guild_id = ?), 0),
-                COALESCE((SELECT weekly_xp FROM users WHERE user_id = ? AND guild_id = ?), 0),
-                COALESCE((SELECT monthly_xp FROM users WHERE user_id = ? AND guild_id = ?), 0),
-                COALESCE((SELECT badges FROM users WHERE user_id = ? AND guild_id = ?), '[]'),
-                COALESCE((SELECT join_date FROM users WHERE user_id = ? AND guild_id = ?), ?),
-                COALESCE((SELECT voice_time FROM users WHERE user_id = ? AND guild_id = ?), 0)
-            )
-        ''', (user_id, guild_id, xp, user_id, guild_id, user_id, guild_id, 
-              user_id, guild_id, user_id, guild_id, user_id, guild_id, 
-              current_time, user_id, guild_id))
-        
-        conn.commit()
-        conn.close()
-    
-    def update_user_level(self, user_id, guild_id, level):
-        """Actualiza el nivel de un usuario"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE users SET level = ? WHERE user_id = ? AND guild_id = ?
-        ''', (level, user_id, guild_id))
-        
-        conn.commit()
-        conn.close()
-    
-    def get_leaderboard(self, guild_id, limit=10, leaderboard_type='total'):
-        """Obtiene el leaderboard del servidor"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        if leaderboard_type == 'weekly':
-            order_by = 'weekly_xp'
-        elif leaderboard_type == 'monthly':
-            order_by = 'monthly_xp'
-        elif leaderboard_type == 'messages':
-            order_by = 'total_messages'
-        elif leaderboard_type == 'voice':
-            order_by = 'voice_time'
-        else:
-            order_by = 'xp'
-        
-        cursor.execute(f'''
-            SELECT user_id, xp, level, {order_by}, total_messages, voice_time FROM users 
-            WHERE guild_id = ? AND {order_by} > 0
-            ORDER BY {order_by} DESC, level DESC 
-            LIMIT ?
-        ''', (guild_id, limit))
-        
-        results = cursor.fetchall()
-        conn.close()
-        return results
-    
-    def get_user_rank(self, user_id, guild_id, rank_type='total'):
-        """Obtiene el ranking de un usuario específico"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        if rank_type == 'weekly':
-            order_by = 'weekly_xp'
-        elif rank_type == 'monthly':
-            order_by = 'monthly_xp'
-        else:
-            order_by = 'xp'
-        
-        cursor.execute(f'''
-            SELECT COUNT(*) + 1 FROM users 
-            WHERE guild_id = ? AND {order_by} > (SELECT {order_by} FROM users WHERE user_id = ? AND guild_id = ?)
-        ''', (guild_id, user_id, guild_id))
-        
-        rank = cursor.fetchone()[0]
-        conn.close()
-        return rank
-    
-    def get_guild_config(self, guild_id):
-        """Obtiene la configuración del servidor"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT * FROM guild_config WHERE guild_id = ?', (guild_id,))
-        result = cursor.fetchone()
-        conn.close()
-        
-        if result:
-            return {
-                'guild_id': result[0],
-                'level_up_channel': result[1],
-                'xp_per_message': result[2],
-                'xp_cooldown': result[3],
-                'enabled_channels': json.loads(result[4]),
-                'disabled_channels': json.loads(result[5]),
-                'xp_multiplier': result[6],
-                'level_formula': result[7],
-                'voice_xp_enabled': bool(result[8]),
-                'voice_xp_rate': result[9],
-                'bonus_roles': json.loads(result[10]),
-                'announce_level_up': bool(result[11]),
-                'stack_roles': bool(result[12]),
-                'custom_rewards': json.loads(result[13])
-            }
-        return {
-            'guild_id': guild_id,
-            'level_up_channel': None,
-            'xp_per_message': 15,
-            'xp_cooldown': 60,
-            'enabled_channels': [],
-            'disabled_channels': [],
-            'xp_multiplier': 1.0,
-            'level_formula': 'exponential',
-            'voice_xp_enabled': False,
-            'voice_xp_rate': 5,
-            'bonus_roles': [],
-            'announce_level_up': True,
-            'stack_roles': False,
-            'custom_rewards': {}
-        }
-    
-    def set_level_role(self, guild_id, level, role_id):
-        """Configura un rol para un nivel específico"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT OR REPLACE INTO level_roles (guild_id, level, role_id)
-            VALUES (?, ?, ?)
-        ''', (guild_id, level, role_id))
-        
-        conn.commit()
-        conn.close()
-    
-    def remove_level_role(self, guild_id, level):
-        """Elimina un rol de nivel"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM level_roles WHERE guild_id = ? AND level = ?', (guild_id, level))
-        
-        conn.commit()
-        conn.close()
-    
-    def get_level_roles(self, guild_id):
-        """Obtiene todos los roles configurados por nivel"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT level, role_id FROM level_roles WHERE guild_id = ? ORDER BY level', (guild_id,))
-        results = cursor.fetchall()
-        conn.close()
-        
-        return {level: role_id for level, role_id in results}
-    
-    def add_badge(self, user_id, guild_id, badge_id):
-        """Agrega una insignia a un usuario"""
-        user_data = self.get_user_data(user_id, guild_id)
-        if not user_data:
-            return False
-        
-        badges = user_data['badges']
-        if badge_id not in badges:
-            badges.append(badge_id)
-            
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute('UPDATE users SET badges = ? WHERE user_id = ? AND guild_id = ?',
-                         (json.dumps(badges), user_id, guild_id))
-            conn.commit()
-            conn.close()
-            return True
-        return False
-    
-    def get_server_stats(self, guild_id):
-        """Obtiene estadísticas del servidor"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Contar usuarios totales
-        cursor.execute('SELECT COUNT(*) FROM users WHERE guild_id = ?', (guild_id,))
-        total_users = cursor.fetchone()[0]
-        
-        # Usuario con más XP
-        cursor.execute('SELECT user_id, xp, level FROM users WHERE guild_id = ? ORDER BY xp DESC LIMIT 1', (guild_id,))
-        top_user = cursor.fetchone()
-        
-        # Nivel promedio
-        cursor.execute('SELECT AVG(level) FROM users WHERE guild_id = ?', (guild_id,))
-        avg_level = cursor.fetchone()[0] or 0
-        
-        # Total de mensajes
-        cursor.execute('SELECT SUM(total_messages) FROM users WHERE guild_id = ?', (guild_id,))
-        total_messages = cursor.fetchone()[0] or 0
-        
-        # Usuarios por nivel
-        cursor.execute('SELECT level, COUNT(*) FROM users WHERE guild_id = ? GROUP BY level ORDER BY level', (guild_id,))
-        level_distribution = dict(cursor.fetchall())
-        
-        conn.close()
-        
-        return {
-            'total_users': total_users,
-            'top_user': top_user,
-            'avg_level': avg_level,
-            'total_messages': total_messages,
-            'level_distribution': level_distribution
-        }
 
 class LevelCalculator:
     @staticmethod
@@ -754,7 +385,6 @@ class ProfileImageGenerator:
 class Levels(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.db = LevelsDatabase()
         self.image_generator = ProfileImageGenerator()
         self.reset_weekly_xp.start()
         self.reset_monthly_xp.start()
@@ -817,34 +447,23 @@ class Levels(commands.Cog):
             print(f"🔧 Configurando servidor: {guild.name}")
             
             # Configurar ajustes básicos del servidor
-            conn = sqlite3.connect(self.db.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT OR REPLACE INTO guild_config (
-                    guild_id, level_up_channel, xp_per_message, xp_cooldown, 
-                    enabled_channels, disabled_channels, xp_multiplier, level_formula
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
+            await database.update_guild_config(
                 guild_id,
-                config['level_up_channel'],
-                config['xp_per_message'],
-                config['xp_cooldown'],
-                json.dumps(config['enabled_channels']),
-                json.dumps(config['disabled_channels']),
-                config['xp_multiplier'],
-                config['level_formula']
-            ))
+                level_up_channel=config['level_up_channel'],
+                xp_per_message=config['xp_per_message'],
+                xp_cooldown=config['xp_cooldown'],
+                enabled_channels=config['enabled_channels'],
+                disabled_channels=config['disabled_channels'],
+                xp_multiplier=config['xp_multiplier'],
+                level_formula=config['level_formula']
+            )
             
             # Configurar roles por nivel
             for level, role_id in config['level_roles'].items():
                 # Verificar que el rol existe
                 role = guild.get_role(role_id)
                 if role:
-                    cursor.execute('''
-                        INSERT OR REPLACE INTO level_roles (guild_id, level, role_id)
-                        VALUES (?, ?, ?)
-                    ''', (guild_id, level, role_id))
+                    await database.set_level_role(guild_id, level, role_id)
             
             # Verificar canal de notificaciones
             channel = guild.get_channel(config['level_up_channel'])
@@ -853,8 +472,6 @@ class Levels(commands.Cog):
             else:
                 print(f"  ❌ Canal con ID {config['level_up_channel']} no encontrado")
             
-            conn.commit()
-            conn.close()
             print(f"✅ Configuración completada para {guild.name}\n")
     
     def get_predefined_config(self, guild_id):
@@ -873,20 +490,12 @@ class Levels(commands.Cog):
     @tasks.loop(hours=168)  # Cada semana
     async def reset_weekly_xp(self):
         """Resetea la XP semanal"""
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET weekly_xp = 0')
-        conn.commit()
-        conn.close()
+        await database.reset_weekly_xp()
     
     @tasks.loop(hours=720)  # Cada mes (30 días)
     async def reset_monthly_xp(self):
         """Resetea la XP mensual"""
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET monthly_xp = 0')
-        conn.commit()
-        conn.close()
+        await database.reset_monthly_xp()
     
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -899,7 +508,7 @@ class Levels(commands.Cog):
         if predefined_config and predefined_config.get('level_up_channel'):
             guild_config = predefined_config
         else:
-            guild_config = self.db.get_guild_config(message.guild.id)
+            guild_config = await database.get_guild_level_config(message.guild.id)
         
         # Verificar si el canal está habilitado para XP
         if guild_config['enabled_channels'] and message.channel.id not in guild_config['enabled_channels']:
@@ -908,7 +517,7 @@ class Levels(commands.Cog):
         if message.channel.id in guild_config['disabled_channels']:
             return
         
-        user_data = self.db.get_user_data(message.author.id, message.guild.id)
+        user_data = await database.get_user_level_data(message.author.id, message.guild.id)
         current_time = int(time.time())
         
         # Verificar cooldown
@@ -920,14 +529,14 @@ class Levels(commands.Cog):
         xp_gain = int(base_xp * guild_config['xp_multiplier'])
         
         # Actualizar XP
-        self.db.update_user_xp(message.author.id, message.guild.id, xp_gain, xp_gain, xp_gain)
+        await database.update_user_xp(message.author.id, message.guild.id, xp_gain, xp_gain, xp_gain)
         
         # Verificar subida de nivel
-        updated_data = self.db.get_user_data(message.author.id, message.guild.id)
+        updated_data = await database.get_user_level_data(message.author.id, message.guild.id)
         new_level = LevelCalculator.calculate_level(updated_data['xp'], guild_config['level_formula'])
         
         if new_level > updated_data['level']:
-            self.db.update_user_level(message.author.id, message.guild.id, new_level)
+            await database.update_user_level(message.author.id, message.guild.id, new_level)
             await self.handle_level_up(message.author, message.guild, new_level, guild_config)
     
     async def handle_level_up(self, user, guild, new_level, guild_config):
@@ -967,7 +576,7 @@ class Levels(commands.Cog):
         
         # Si no hay configuración predefinida, usar la de la base de datos
         if not level_roles:
-            level_roles = self.db.get_level_roles(guild.id)
+            level_roles = await database.get_level_roles(guild.id)
         
         if new_level in level_roles:
             role = guild.get_role(level_roles[new_level])
@@ -1100,7 +709,7 @@ class Levels(commands.Cog):
         if user is None:
             user = ctx.author
         
-        user_data = self.db.get_user_data(user.id, ctx.guild.id)
+        user_data = await database.get_user_level_data(user.id, ctx.guild.id)
         if not user_data:
             embed = discord.Embed(
                 title="❌ Error",
@@ -1111,13 +720,13 @@ class Levels(commands.Cog):
             return
         
         # Recalcular nivel por si acaso
-        guild_config = self.db.get_guild_config(ctx.guild.id)
+        guild_config = await database.get_guild_level_config(ctx.guild.id)
         calculated_level = LevelCalculator.calculate_level(user_data['xp'], guild_config['level_formula'])
         if calculated_level != user_data['level']:
-            self.db.update_user_level(user.id, ctx.guild.id, calculated_level)
+            await database.update_user_level(user.id, ctx.guild.id, calculated_level)
             user_data['level'] = calculated_level
         
-        rank = self.db.get_user_rank(user.id, ctx.guild.id)
+        rank = await database.get_user_rank(user.id, ctx.guild.id)
         
         # Generar imagen de perfil
         profile_image = await self.image_generator.generate_profile_image(user, user_data, rank)
@@ -1150,12 +759,12 @@ class Levels(commands.Cog):
         """Muestra el top de usuarios por XP"""
         if user:
             # Mostrar posición específica del usuario
-            user_data = self.db.get_user_data(user.id, ctx.guild.id)
+            user_data = await database.get_user_level_data(user.id, ctx.guild.id)
             if not user_data:
                 await ctx.send("❌ Este usuario no tiene datos registrados.")
                 return
             
-            rank = self.db.get_user_rank(user.id, ctx.guild.id)
+            rank = await database.get_user_rank(user.id, ctx.guild.id)
             embed = discord.Embed(
                 title=f"📊 Posición de {user.display_name}",
                 description=f"**#{rank}** - Nivel {user_data['level']} ({user_data['xp']} XP)",
@@ -1166,7 +775,7 @@ class Levels(commands.Cog):
             return
         
         # Mostrar leaderboard general
-        leaderboard = self.db.get_leaderboard(ctx.guild.id, min(limit, 20))
+        leaderboard = await database.get_levels_leaderboard(ctx.guild.id, min(limit, 20))
         
         if not leaderboard:
             await ctx.send("❌ No hay datos de usuarios registrados.")
@@ -1178,7 +787,7 @@ class Levels(commands.Cog):
         )
         
         description = ""
-        for i, (user_id, xp, level, _) in enumerate(leaderboard, 1):
+        for i, (user_id, xp, level, _, _, _) in enumerate(leaderboard, 1):
             user = ctx.guild.get_member(user_id)
             if user:
                 medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"**{i}.**"
@@ -1190,7 +799,7 @@ class Levels(commands.Cog):
     @commands.command(name="top_semanal", aliases=["top_weekly"])
     async def top_semanal(self, ctx, limit: int = 10):
         """Muestra el top semanal"""
-        leaderboard = self.db.get_leaderboard(ctx.guild.id, min(limit, 20), 'weekly')
+        leaderboard = await database.get_levels_leaderboard(ctx.guild.id, min(limit, 20), 'weekly')
         
         if not leaderboard:
             await ctx.send("❌ No hay datos semanales registrados.")
@@ -1202,7 +811,7 @@ class Levels(commands.Cog):
         )
         
         description = ""
-        for i, (user_id, _, _, weekly_xp) in enumerate(leaderboard, 1):
+        for i, (user_id, _, _, weekly_xp, _, _) in enumerate(leaderboard, 1):
             user = ctx.guild.get_member(user_id)
             if user and weekly_xp > 0:
                 medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"**{i}.**"
@@ -1214,7 +823,7 @@ class Levels(commands.Cog):
     @commands.command(name="top_mensual", aliases=["top_monthly"])
     async def top_mensual(self, ctx, limit: int = 10):
         """Muestra el top mensual"""
-        leaderboard = self.db.get_leaderboard(ctx.guild.id, min(limit, 20), 'monthly')
+        leaderboard = await database.get_levels_leaderboard(ctx.guild.id, min(limit, 20), 'monthly')
         
         if not leaderboard:
             await ctx.send("❌ No hay datos mensuales registrados.")
@@ -1226,7 +835,7 @@ class Levels(commands.Cog):
         )
         
         description = ""
-        for i, (user_id, _, _, monthly_xp) in enumerate(leaderboard, 1):
+        for i, (user_id, _, _, monthly_xp, _, _) in enumerate(leaderboard, 1):
             user = ctx.guild.get_member(user_id)
             if user and monthly_xp > 0:
                 medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"**{i}.**"
@@ -1241,7 +850,7 @@ class Levels(commands.Cog):
         if user is None:
             user = ctx.author
         
-        user_data = self.db.get_user_data(user.id, ctx.guild.id)
+        user_data = await database.get_user_level_data(user.id, ctx.guild.id)
         if not user_data:
             embed = discord.Embed(
                 title="❌ Error",
@@ -1251,7 +860,7 @@ class Levels(commands.Cog):
             await ctx.send(embed=embed)
             return
         
-        guild_config = self.db.get_guild_config(ctx.guild.id)
+        guild_config = await database.get_guild_level_config(ctx.guild.id)
         current_level_xp = LevelCalculator.calculate_xp_for_level(user_data['level'], guild_config['level_formula'])
         
         # Verificar si ya está en nivel máximo
@@ -1303,12 +912,12 @@ class Levels(commands.Cog):
             await ctx.send("❌ La XP no puede ser negativa.")
             return
         
-        self.db.set_user_xp(user.id, ctx.guild.id, xp)
+        await database.set_user_xp(user.id, ctx.guild.id, xp)
         
         # Recalcular nivel
-        guild_config = self.db.get_guild_config(ctx.guild.id)
+        guild_config = await database.get_guild_level_config(ctx.guild.id)
         new_level = LevelCalculator.calculate_level(xp, guild_config['level_formula'])
-        self.db.update_user_level(user.id, ctx.guild.id, new_level)
+        await database.update_user_level(user.id, ctx.guild.id, new_level)
         
         embed = discord.Embed(
             title="✅ XP Establecida",
@@ -1321,22 +930,22 @@ class Levels(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def add_xp(self, ctx, user: discord.Member, xp: int):
         """Agrega XP a un usuario"""
-        user_data = self.db.get_user_data(user.id, ctx.guild.id)
+        user_data = await database.get_user_level_data(user.id, ctx.guild.id)
         if not user_data:
             # Crear usuario si no existe
-            self.db.update_user_xp(user.id, ctx.guild.id, 0)
-            user_data = self.db.get_user_data(user.id, ctx.guild.id)
+            await database.update_user_xp(user.id, ctx.guild.id, 0)
+            user_data = await database.get_user_level_data(user.id, ctx.guild.id)
         
         old_level = user_data['level']
-        self.db.update_user_xp(user.id, ctx.guild.id, xp)
+        await database.update_user_xp(user.id, ctx.guild.id, xp)
         
         # Verificar subida de nivel
-        updated_data = self.db.get_user_data(user.id, ctx.guild.id)
-        guild_config = self.db.get_guild_config(ctx.guild.id)
+        updated_data = await database.get_user_level_data(user.id, ctx.guild.id)
+        guild_config = await database.get_guild_level_config(ctx.guild.id)
         new_level = LevelCalculator.calculate_level(updated_data['xp'], guild_config['level_formula'])
         
         if new_level != old_level:
-            self.db.update_user_level(user.id, ctx.guild.id, new_level)
+            await database.update_user_level(user.id, ctx.guild.id, new_level)
             if new_level > old_level:
                 await self.handle_level_up(user, ctx.guild, new_level, guild_config)
         
@@ -1355,11 +964,11 @@ class Levels(commands.Cog):
             await ctx.send("❌ El nivel debe estar entre 1 y 200.")
             return
         
-        guild_config = self.db.get_guild_config(ctx.guild.id)
+        guild_config = await database.get_guild_level_config(ctx.guild.id)
         required_xp = LevelCalculator.calculate_xp_for_level(level, guild_config['level_formula'])
         
-        self.db.set_user_xp(user.id, ctx.guild.id, required_xp)
-        self.db.update_user_level(user.id, ctx.guild.id, level)
+        await database.set_user_xp(user.id, ctx.guild.id, required_xp)
+        await database.update_user_level(user.id, ctx.guild.id, level)
         
         embed = discord.Embed(
             title="✅ Nivel Establecido",
@@ -1381,7 +990,7 @@ class Levels(commands.Cog):
             await ctx.send("❌ El nivel debe ser mayor a 0.")
             return
         
-        self.db.set_level_role(ctx.guild.id, level, role.id)
+        await database.set_level_role(ctx.guild.id, level, role.id)
         
         embed = discord.Embed(
             title="✅ Rol de Nivel Configurado",
@@ -1397,23 +1006,7 @@ class Levels(commands.Cog):
         if channel is None:
             channel = ctx.channel
         
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT OR REPLACE INTO guild_config (guild_id, level_up_channel, xp_per_message, xp_cooldown, enabled_channels, disabled_channels, xp_multiplier, level_formula)
-            VALUES (?, ?, 
-                COALESCE((SELECT xp_per_message FROM guild_config WHERE guild_id = ?), 15),
-                COALESCE((SELECT xp_cooldown FROM guild_config WHERE guild_id = ?), 60),
-                COALESCE((SELECT enabled_channels FROM guild_config WHERE guild_id = ?), '[]'),
-                COALESCE((SELECT disabled_channels FROM guild_config WHERE guild_id = ?), '[]'),
-                COALESCE((SELECT xp_multiplier FROM guild_config WHERE guild_id = ?), 1.0),
-                COALESCE((SELECT level_formula FROM guild_config WHERE guild_id = ?), 'exponential')
-            )
-        ''', (ctx.guild.id, channel.id, ctx.guild.id, ctx.guild.id, ctx.guild.id, ctx.guild.id, ctx.guild.id, ctx.guild.id))
-        
-        conn.commit()
-        conn.close()
+        await database.update_guild_config(ctx.guild.id, level_up_channel=channel.id)
         
         embed = discord.Embed(
             title="✅ Canal Configurado",
@@ -1426,7 +1019,7 @@ class Levels(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def config_xp(self, ctx, xp_per_message: int = None, cooldown: int = None, multiplier: float = None):
         """Configura los parámetros de XP del servidor"""
-        guild_config = self.db.get_guild_config(ctx.guild.id)
+        guild_config = await database.get_guild_level_config(ctx.guild.id)
         
         if xp_per_message is None and cooldown is None and multiplier is None:
             embed = discord.Embed(
@@ -1440,19 +1033,16 @@ class Levels(commands.Cog):
             await ctx.send(embed=embed)
             return
         
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        
         # Actualizar valores proporcionados
+        update_data = {}
         if xp_per_message is not None:
-            cursor.execute('UPDATE guild_config SET xp_per_message = ? WHERE guild_id = ?', (xp_per_message, ctx.guild.id))
+            update_data['xp_per_message'] = xp_per_message
         if cooldown is not None:
-            cursor.execute('UPDATE guild_config SET xp_cooldown = ? WHERE guild_id = ?', (cooldown, ctx.guild.id))
+            update_data['xp_cooldown'] = cooldown
         if multiplier is not None:
-            cursor.execute('UPDATE guild_config SET xp_multiplier = ? WHERE guild_id = ?', (multiplier, ctx.guild.id))
+            update_data['xp_multiplier'] = multiplier
         
-        conn.commit()
-        conn.close()
+        await database.update_guild_config(ctx.guild.id, **update_data)
         
         embed = discord.Embed(
             title="✅ Configuración Actualizada",
@@ -1474,18 +1064,12 @@ class Levels(commands.Cog):
         if channel is None:
             channel = ctx.channel
         
-        guild_config = self.db.get_guild_config(ctx.guild.id)
+        guild_config = await database.get_guild_level_config(ctx.guild.id)
         enabled_channels = guild_config['enabled_channels']
         
         if channel.id not in enabled_channels:
             enabled_channels.append(channel.id)
-            
-            conn = sqlite3.connect(self.db.db_path)
-            cursor = conn.cursor()
-            cursor.execute('UPDATE guild_config SET enabled_channels = ? WHERE guild_id = ?', 
-                         (json.dumps(enabled_channels), ctx.guild.id))
-            conn.commit()
-            conn.close()
+            await database.update_guild_config(ctx.guild.id, enabled_channels=enabled_channels)
         
         embed = discord.Embed(
             title="✅ Canal Habilitado",
@@ -1501,18 +1085,12 @@ class Levels(commands.Cog):
         if channel is None:
             channel = ctx.channel
         
-        guild_config = self.db.get_guild_config(ctx.guild.id)
+        guild_config = await database.get_guild_level_config(ctx.guild.id)
         disabled_channels = guild_config['disabled_channels']
         
         if channel.id not in disabled_channels:
             disabled_channels.append(channel.id)
-            
-            conn = sqlite3.connect(self.db.db_path)
-            cursor = conn.cursor()
-            cursor.execute('UPDATE guild_config SET disabled_channels = ? WHERE guild_id = ?', 
-                         (json.dumps(disabled_channels), ctx.guild.id))
-            conn.commit()
-            conn.close()
+            await database.update_guild_config(ctx.guild.id, disabled_channels=disabled_channels)
         
         embed = discord.Embed(
             title="✅ Canal Deshabilitado",
@@ -1527,7 +1105,7 @@ class Levels(commands.Cog):
         if user is None:
             user = ctx.author
         
-        user_data = self.db.get_user_data(user.id, ctx.guild.id)
+        user_data = await database.get_user_level_data(user.id, ctx.guild.id)
         if not user_data:
             embed = discord.Embed(
                 title="❌ Error",
@@ -1537,7 +1115,7 @@ class Levels(commands.Cog):
             await ctx.send(embed=embed)
             return
         
-        badges = user_data['badges']
+        badges = user_data['badges'] if user_data['badges'] else []
         
         embed = discord.Embed(
             title=f"🏅 Insignias de {user.display_name}",
@@ -1560,11 +1138,7 @@ class Levels(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def reset_weekly(self, ctx):
         """Resetea manualmente las estadísticas semanales"""
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET weekly_xp = 0 WHERE guild_id = ?', (ctx.guild.id,))
-        conn.commit()
-        conn.close()
+        await database.reset_weekly_xp(ctx.guild.id)
         
         embed = discord.Embed(
             title="✅ Estadísticas Semanales Reseteadas",
@@ -1577,11 +1151,7 @@ class Levels(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def reset_monthly(self, ctx):
         """Resetea manualmente las estadísticas mensuales"""
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET monthly_xp = 0 WHERE guild_id = ?', (ctx.guild.id,))
-        conn.commit()
-        conn.close()
+        await database.reset_monthly_xp(ctx.guild.id)
         
         embed = discord.Embed(
             title="✅ Estadísticas Mensuales Reseteadas",
@@ -1599,16 +1169,11 @@ class Levels(commands.Cog):
             return
         
         # Guardar multiplicador actual
-        guild_config = self.db.get_guild_config(ctx.guild.id)
+        guild_config = await database.get_guild_level_config(ctx.guild.id)
         original_multiplier = guild_config['xp_multiplier']
         
         # Aplicar nuevo multiplicador
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE guild_config SET xp_multiplier = ? WHERE guild_id = ?', 
-                     (multiplier, ctx.guild.id))
-        conn.commit()
-        conn.close()
+        await database.update_guild_config(ctx.guild.id, xp_multiplier=multiplier)
         
         embed = discord.Embed(
             title="🎉 ¡Evento de XP Activado!",
@@ -1620,12 +1185,7 @@ class Levels(commands.Cog):
         # Programar restauración del multiplicador
         await asyncio.sleep(duration_hours * 3600)  # Convertir horas a segundos
         
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        cursor.execute('UPDATE guild_config SET xp_multiplier = ? WHERE guild_id = ?', 
-                     (original_multiplier, ctx.guild.id))
-        conn.commit()
-        conn.close()
+        await database.update_guild_config(ctx.guild.id, xp_multiplier=original_multiplier)
         
         # Notificar fin del evento
         embed = discord.Embed(
@@ -1650,41 +1210,22 @@ class Levels(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def levels_stats(self, ctx):
         """Muestra estadísticas generales del sistema de niveles"""
-        conn = sqlite3.connect(self.db.db_path)
-        cursor = conn.cursor()
-        
-        # Contar usuarios totales
-        cursor.execute('SELECT COUNT(*) FROM users WHERE guild_id = ?', (ctx.guild.id,))
-        total_users = cursor.fetchone()[0]
-        
-        # Usuario con más XP
-        cursor.execute('SELECT user_id, xp, level FROM users WHERE guild_id = ? ORDER BY xp DESC LIMIT 1', (ctx.guild.id,))
-        top_user = cursor.fetchone()
-        
-        # Nivel promedio
-        cursor.execute('SELECT AVG(level) FROM users WHERE guild_id = ?', (ctx.guild.id,))
-        avg_level = cursor.fetchone()[0] or 0
-        
-        # Total de mensajes registrados
-        cursor.execute('SELECT SUM(total_messages) FROM users WHERE guild_id = ?', (ctx.guild.id,))
-        total_messages = cursor.fetchone()[0] or 0
-        
-        conn.close()
+        stats = await database.get_level_server_stats(ctx.guild.id)
         
         embed = discord.Embed(
             title="📊 Estadísticas del Sistema de Niveles",
             color=0x00ffff
         )
-        embed.add_field(name="Usuarios Registrados", value=f"{total_users:,}", inline=True)
-        embed.add_field(name="Nivel Promedio", value=f"{avg_level:.1f}", inline=True)
-        embed.add_field(name="Mensajes Totales", value=f"{total_messages:,}", inline=True)
+        embed.add_field(name="Usuarios Registrados", value=f"{stats['total_users']:,}", inline=True)
+        embed.add_field(name="Nivel Promedio", value=f"{stats['avg_level']:.1f}", inline=True)
+        embed.add_field(name="Mensajes Totales", value=f"{stats['total_messages']:,}", inline=True)
         
-        if top_user:
-            top_member = ctx.guild.get_member(top_user[0])
+        if stats['top_user']:
+            top_member = ctx.guild.get_member(stats['top_user'][0])
             if top_member:
                 embed.add_field(
                     name="Usuario #1", 
-                    value=f"{top_member.display_name}\nNivel {top_user[2]} ({top_user[1]:,} XP)", 
+                    value=f"{top_member.display_name}\nNivel {stats['top_user'][2]} ({stats['top_user'][1]:,} XP)", 
                     inline=False
                 )
         
@@ -1746,31 +1287,6 @@ class Levels(commands.Cog):
             description="Se ha recargado la configuración predefinida desde el código.",
             color=0x00ff00
         )
-        await ctx.send(embed=embed)
-        """Muestra ayuda sobre el sistema de niveles"""
-        embed = discord.Embed(
-            title="📚 Sistema de Niveles - Ayuda",
-            color=0x00ffff
-        )
-        
-        embed.add_field(
-            name="🔹 Comandos de Usuario",
-            value="`!perfil` - Ver tu perfil\n`!xp` - Ver tu XP actual\n`!top` - Ver ranking\n`!top_semanal` - Ranking semanal\n`!top_mensual` - Ranking mensual\n`!insignias` - Ver insignias",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🔹 Comandos de Admin",
-            value="`!set_xp @user 1000` - Establecer XP\n`!add_xp @user 100` - Agregar XP\n`!config_nivel 10 @role` - Configurar rol por nivel\n`!config_canal_nivel #canal` - Canal de notificaciones",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="🔹 Cómo Funciona",
-            value="• Ganas XP enviando mensajes\n• Hay cooldown entre mensajes\n• Al subir de nivel, recibes roles especiales\n• Puedes competir en rankings semanales y mensuales",
-            inline=False
-        )
-        
         await ctx.send(embed=embed)
 
 async def setup(bot: commands.Bot):

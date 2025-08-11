@@ -3,33 +3,14 @@ from discord.ext import commands
 import asyncio
 from datetime import datetime, timezone
 
-# Importación de funciones de base de datos - vamos a crear funciones temporales
-# from core.database import add_bump, get_bumps, get_all_bumps
-
-# Funciones temporales de base de datos (reemplazar con tu implementación real)
-async def add_bump(user_id: int, guild_id: int) -> int:
-    """Función temporal - implementar con tu base de datos real"""
-    # Por ahora solo retorna un número incremental
-    # Aquí deberías conectar con tu base de datos real
-    return 1
-
-async def get_bumps(user_id: int, guild_id: int) -> int:
-    """Función temporal - implementar con tu base de datos real"""
-    # Por ahora retorna 0
-    # Aquí deberías consultar tu base de datos real
-    return 0
-
-async def get_all_bumps(guild_id: int) -> list:
-    """Función temporal - implementar con tu base de datos real"""
-    # Por ahora retorna lista vacía
-    # Aquí deberías consultar tu base de datos real para obtener ranking
-    return []
+# Importar funciones de base de datos
+from database import add_bump, get_bumps, get_all_bumps
 
 # Configuración del Bump Tracker
 DISBOARD_BOT_ID = 302050872383242240
 ROLE_ID_TO_PING = 1400106792196898892
 CHANNEL_ID = 1400106793249538050
-COUNTDOWN = 2 * 60 * 60  # 2 horas (igual que el primer código)
+COUNTDOWN = 2 * 60 * 60  # 2 horas
 EMBED_COLOR = 0x00ffff
 
 
@@ -370,7 +351,4 @@ class BumpTracker(commands.Cog):
 
 
 async def setup(bot: commands.Bot):
-    # Inicializar base de datos si usas el archivo database.py
-    # from core.database import init_database
-    # await init_database()
     await bot.add_cog(BumpTracker(bot))

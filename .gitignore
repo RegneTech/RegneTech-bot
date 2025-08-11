@@ -1,5 +1,4 @@
-.env
+# Ignorar archivos innecesarios
 __pycache__/
 *.pyc
-*.log
-*.db
+.env

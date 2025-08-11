@@ -1,7 +1,7 @@
 # modules/invites/invites.py
 import discord
 from discord.ext import commands
-import sqlite3
+import database
 from datetime import datetime
 from typing import Dict, Optional, List, Tuple
 import asyncio
@@ -10,39 +10,7 @@ class Invites(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.invite_cache: Dict[int, Dict[str, discord.Invite]] = {}
-        self.db_path = 'invites.db'
         print("🔧 Inicializando módulo de invitaciones...")
-        self.init_database()
-    
-    def init_database(self):
-        """Inicializar la base de datos SQLite con estructura mejorada"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Tabla principal de invitaciones
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS invites (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id INTEGER NOT NULL,
-                    invited_by_id INTEGER NOT NULL,
-                    guild_id INTEGER NOT NULL,
-                    invite_code TEXT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    is_active BOOLEAN DEFAULT 1
-                )
-            ''')
-            
-            # Índices para mejor rendimiento
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_invites_user_id ON invites(user_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_invites_invited_by_id ON invites(invited_by_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_invites_guild_id ON invites(guild_id)')
-            
-            conn.commit()
-            conn.close()
-            print("📊 Base de datos inicializada correctamente")
-        except Exception as e:
-            print(f"❌ Error inicializando base de datos: {e}")
     
     @commands.Cog.listener()
     async def on_ready(self):
@@ -182,7 +150,7 @@ class Invites(commands.Cog):
             # Guardar en base de datos si se encontró invitador
             if inviter_id and inviter_id != member.id:
                 print(f"💾 Guardando invitación: {member.id} invitado por {inviter_id}")
-                self.save_invitation(member.id, inviter_id, guild.id, used_invite_code)
+                await database.save_invitation(member.id, inviter_id, guild.id, used_invite_code)
                 
                 # Enviar mensaje al canal específico
                 channel_id = 1400106792821981249  # Cambiar por el ID de tu canal
@@ -224,7 +192,7 @@ class Invites(commands.Cog):
         """Enviar mensaje de bienvenida personalizado"""
         try:
             # Contar invitaciones del invitador
-            invite_count = self.get_user_invites_count(inviter.id, guild.id)
+            invite_count = await database.get_user_invites_count(inviter.id, guild.id)
             
             # Mensaje principal personalizado
             description = f"{member.mention} ha sido invitado por {inviter.mention} el cual ahora tiene **{invite_count}** invitaciones"
@@ -259,97 +227,11 @@ class Invites(commands.Cog):
             
         try:
             # Marcar invitaciones como inactivas en lugar de eliminarlas
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                UPDATE invites SET is_active = 0 
-                WHERE user_id = ? AND guild_id = ?
-            ''', (member.id, member.guild.id))
-            
-            conn.commit()
-            conn.close()
-            
+            await database.deactivate_user_invites(member.id, member.guild.id)
             print(f"👋 {member.display_name} salió - invitación marcada como inactiva")
             
         except Exception as e:
             print(f"❌ Error procesando member_remove: {e}")
-    
-    def save_invitation(self, user_id: int, invited_by_id: int, guild_id: int, invite_code: str = None):
-        """Guardar invitación en base de datos"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                INSERT INTO invites (user_id, invited_by_id, guild_id, invite_code, timestamp)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (user_id, invited_by_id, guild_id, invite_code, datetime.utcnow().isoformat()))
-            
-            conn.commit()
-            conn.close()
-            print(f"💾 Invitación guardada: {user_id} invitado por {invited_by_id}")
-        except Exception as e:
-            print(f"❌ Error guardando invitación: {e}")
-    
-    def get_user_invites_count(self, user_id: int, guild_id: int) -> int:
-        """Obtener conteo de invitaciones activas de un usuario"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT COUNT(*) FROM invites 
-                WHERE invited_by_id = ? AND guild_id = ? AND is_active = 1
-            ''', (user_id, guild_id))
-            
-            count = cursor.fetchone()[0]
-            conn.close()
-            return count
-        except Exception as e:
-            print(f"❌ Error obteniendo conteo: {e}")
-            return 0
-    
-    def get_user_inviter(self, user_id: int, guild_id: int) -> Optional[int]:
-        """Obtener quién invitó a un usuario"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT invited_by_id FROM invites 
-                WHERE user_id = ? AND guild_id = ?
-                ORDER BY timestamp DESC LIMIT 1
-            ''', (user_id, guild_id))
-            
-            result = cursor.fetchone()
-            conn.close()
-            return result[0] if result else None
-        except Exception as e:
-            print(f"❌ Error obteniendo invitador: {e}")
-            return None
-    
-    def get_leaderboard(self, guild_id: int, limit: int = 10) -> List[Tuple[int, int]]:
-        """Obtener leaderboard de invitaciones"""
-        try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            cursor.execute('''
-                SELECT invited_by_id, COUNT(*) as count
-                FROM invites 
-                WHERE guild_id = ? AND is_active = 1
-                GROUP BY invited_by_id
-                ORDER BY count DESC
-                LIMIT ?
-            ''', (guild_id, limit))
-            
-            results = cursor.fetchall()
-            conn.close()
-            return results
-        except Exception as e:
-            print(f"❌ Error obteniendo leaderboard: {e}")
-            return []
     
     # ===== COMANDOS =====
     
@@ -428,15 +310,10 @@ class Invites(commands.Cog):
             )
             
             # Estado de la base de datos
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM invites WHERE guild_id = ?', (ctx.guild.id,))
-            db_count = cursor.fetchone()[0]
-            conn.close()
-            
+            stats = await database.get_invites_stats(ctx.guild.id)
             embed.add_field(
                 name="💾 Base de datos",
-                value=f"**{db_count}** registros",
+                value=f"**{stats['total_invites']}** registros\n**{stats['active_invites']}** activas",
                 inline=True
             )
             
@@ -471,23 +348,26 @@ class Invites(commands.Cog):
         """➕ Registrar invitación manualmente (para testing)"""
         try:
             # Guardar en base de datos
-            self.save_invitation(member.id, inviter.id, ctx.guild.id, "MANUAL")
+            success = await database.save_invitation(member.id, inviter.id, ctx.guild.id, "MANUAL")
             
-            embed = discord.Embed(
-                title="➕ Invitación Registrada Manualmente",
-                description=f"**{member.mention}** ahora aparece como invitado por **{inviter.mention}**",
-                color=0x00ff00
-            )
-            
-            # Mostrar conteo actualizado
-            count = self.get_user_invites_count(inviter.id, ctx.guild.id)
-            embed.add_field(
-                name="📊 Total de invitaciones",
-                value=f"**{inviter.display_name}** ahora tiene **{count}** invitaciones",
-                inline=False
-            )
-            
-            await ctx.send(embed=embed)
+            if success:
+                embed = discord.Embed(
+                    title="➕ Invitación Registrada Manualmente",
+                    description=f"**{member.mention}** ahora aparece como invitado por **{inviter.mention}**",
+                    color=0x00ff00
+                )
+                
+                # Mostrar conteo actualizado
+                count = await database.get_user_invites_count(inviter.id, ctx.guild.id)
+                embed.add_field(
+                    name="📊 Total de invitaciones",
+                    value=f"**{inviter.display_name}** ahora tiene **{count}** invitaciones",
+                    inline=False
+                )
+                
+                await ctx.send(embed=embed)
+            else:
+                await ctx.send("❌ Error guardando la invitación")
             
         except Exception as e:
             await ctx.send(f"❌ Error: {e}")
@@ -503,11 +383,7 @@ class Invites(commands.Cog):
         
         try:
             # Verificar conexión a base de datos
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute('SELECT COUNT(*) FROM invites WHERE guild_id = ?', (ctx.guild.id,))
-            total_invites = cursor.fetchone()[0]
-            conn.close()
+            stats = await database.get_invites_stats(ctx.guild.id)
             
             embed.add_field(
                 name="✅ Base de datos",
@@ -517,7 +393,7 @@ class Invites(commands.Cog):
             
             embed.add_field(
                 name="📊 Invitaciones registradas",
-                value=f"{total_invites}",
+                value=f"{stats['total_invites']}",
                 inline=True
             )
             
@@ -634,7 +510,7 @@ class Invites(commands.Cog):
     async def user_invites(self, ctx, member: discord.Member = None):
         """👤 Ver cuántas invitaciones ha hecho un usuario"""
         target = member or ctx.author
-        count = self.get_user_invites_count(target.id, ctx.guild.id)
+        count = await database.get_user_invites_count(target.id, ctx.guild.id)
         
         embed = discord.Embed(
             title="📊 Estadísticas de Invitaciones",
@@ -682,7 +558,7 @@ class Invites(commands.Cog):
     async def who_invited(self, ctx, member: discord.Member = None):
         """🔍 Ver quién invitó a un usuario"""
         target = member or ctx.author
-        inviter_id = self.get_user_inviter(target.id, ctx.guild.id)
+        inviter_id = await database.get_user_inviter(target.id, ctx.guild.id)
         
         embed = discord.Embed(
             color=0x2ecc71,
@@ -728,7 +604,7 @@ class Invites(commands.Cog):
         elif limit < 1:
             limit = 10
         
-        results = self.get_leaderboard(ctx.guild.id, limit)
+        results = await database.get_invites_leaderboard(ctx.guild.id, limit)
         
         if not results:
             embed = discord.Embed(
@@ -788,7 +664,7 @@ class Invites(commands.Cog):
     @commands.command(name="my_rank", aliases=["mi_rango", "myrank", "my_position"])
     async def my_rank(self, ctx):
         """📍 Ver tu posición en el ranking de invitaciones"""
-        results = self.get_leaderboard(ctx.guild.id, 100)  # Obtener más resultados para encontrar posición
+        results = await database.get_invites_leaderboard(ctx.guild.id, 100)  # Obtener más resultados para encontrar posición
         
         user_position = None
         user_count = 0
@@ -843,31 +719,7 @@ class Invites(commands.Cog):
     async def invites_info(self, ctx):
         """📈 Información detallada del sistema (solo moderadores)"""
         try:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            # Estadísticas generales
-            cursor.execute('SELECT COUNT(*) FROM invites WHERE guild_id = ? AND is_active = 1', (ctx.guild.id,))
-            active_invites = cursor.fetchone()[0]
-            
-            cursor.execute('SELECT COUNT(*) FROM invites WHERE guild_id = ? AND is_active = 0', (ctx.guild.id,))
-            inactive_invites = cursor.fetchone()[0]
-            
-            cursor.execute('SELECT COUNT(DISTINCT invited_by_id) FROM invites WHERE guild_id = ? AND is_active = 1', (ctx.guild.id,))
-            unique_inviters = cursor.fetchone()[0]
-            
-            # Mejor invitador
-            cursor.execute('''
-                SELECT invited_by_id, COUNT(*) as count
-                FROM invites 
-                WHERE guild_id = ? AND is_active = 1
-                GROUP BY invited_by_id
-                ORDER BY count DESC
-                LIMIT 1
-            ''', (ctx.guild.id,))
-            
-            top_inviter_data = cursor.fetchone()
-            conn.close()
+            stats = await database.get_invites_stats(ctx.guild.id)
             
             embed = discord.Embed(
                 title="📈 Información del Sistema de Invitaciones",
@@ -878,10 +730,10 @@ class Invites(commands.Cog):
             embed.add_field(
                 name="📊 Estadísticas Generales",
                 value=(
-                    f"**Invitaciones activas:** {active_invites}\n"
-                    f"**Invitaciones inactivas:** {inactive_invites}\n"
-                    f"**Total:** {active_invites + inactive_invites}\n"
-                    f"**Usuarios que han invitado:** {unique_inviters}"
+                    f"**Invitaciones activas:** {stats['active_invites']}\n"
+                    f"**Invitaciones inactivas:** {stats['inactive_invites']}\n"
+                    f"**Total:** {stats['total_invites']}\n"
+                    f"**Usuarios que han invitado:** {stats['unique_inviters']}"
                 ),
                 inline=False
             )
@@ -893,12 +745,12 @@ class Invites(commands.Cog):
             )
             
             # Información del mejor invitador
-            if top_inviter_data:
-                top_inviter = ctx.guild.get_member(top_inviter_data[0])
+            if stats['top_inviter']:
+                top_inviter = ctx.guild.get_member(stats['top_inviter'])
                 top_inviter_name = top_inviter.display_name if top_inviter else "Usuario desconocido"
                 embed.add_field(
                     name="👑 Mejor Invitador",
-                    value=f"**{top_inviter_name}**\n{top_inviter_data[1]} invitaciones",
+                    value=f"**{top_inviter_name}**\n{stats['top_inviter_count']} invitaciones",
                     inline=True
                 )
             

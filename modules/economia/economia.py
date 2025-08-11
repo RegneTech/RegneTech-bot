@@ -2,332 +2,33 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button
 import json
-import sqlite3
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 import asyncio
 import os
 import re
-
-class EconomiaDatabase:
-    def __init__(self, db_path="economia.db"):
-        self.db_path = db_path
-        self.init_database()
-    
-    def init_database(self):
-        """Inicializa la base de datos con las tablas necesarias"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Tabla de usuarios y saldos
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS usuarios (
-                user_id INTEGER PRIMARY KEY,
-                saldo REAL DEFAULT 0.0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Tabla de productos en la tienda
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS productos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT UNIQUE NOT NULL,
-                precio REAL NOT NULL,
-                cantidad INTEGER NOT NULL,
-                role_id INTEGER,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Tabla de inventario de usuarios
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS inventario (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                producto_nombre TEXT,
-                cantidad INTEGER DEFAULT 1,
-                precio_compra REAL,
-                fecha_compra TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES usuarios (user_id)
-            )
-        ''')
-        
-        # Tabla de transacciones (historial)
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS transacciones (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                tipo TEXT NOT NULL,
-                monto REAL,
-                descripcion TEXT,
-                ejecutado_por INTEGER,
-                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES usuarios (user_id)
-            )
-        ''')
-        
-        conn.commit()
-        conn.close()
-    
-    def get_user_balance(self, user_id):
-        """Obtiene el saldo de un usuario"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT saldo FROM usuarios WHERE user_id = ?', (user_id,))
-        result = cursor.fetchone()
-        
-        if result is None:
-            cursor.execute('INSERT INTO usuarios (user_id, saldo) VALUES (?, 0.0)', (user_id,))
-            conn.commit()
-            conn.close()
-            return Decimal('0.00')
-        
-        conn.close()
-        return Decimal(str(result[0])).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    
-    def update_user_balance(self, user_id, new_balance, admin_id, operation_type, description):
-        """Actualiza el saldo de un usuario y registra la transacción"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        # Asegurar que el usuario existe
-        cursor.execute('INSERT OR IGNORE INTO usuarios (user_id, saldo) VALUES (?, 0.0)', (user_id,))
-        
-        # Actualizar saldo
-        cursor.execute('UPDATE usuarios SET saldo = ? WHERE user_id = ?', (float(new_balance), user_id))
-        
-        # Registrar transacción
-        cursor.execute('''
-            INSERT INTO transacciones (user_id, tipo, monto, descripcion, ejecutado_por)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (user_id, operation_type, float(new_balance), description, admin_id))
-        
-        conn.commit()
-        conn.close()
-    
-    def add_transaction(self, user_id, tipo, monto, descripcion, ejecutado_por=None):
-        """Registra una transacción"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            INSERT INTO transacciones (user_id, tipo, monto, descripcion, ejecutado_por)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (user_id, tipo, float(monto) if monto else None, descripcion, ejecutado_por))
-        
-        conn.commit()
-        conn.close()
-    
-    def get_user_transactions(self, user_id):
-        """Obtiene el historial de transacciones de un usuario"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT tipo, monto, descripcion, timestamp, ejecutado_por
-            FROM transacciones 
-            WHERE user_id = ? 
-            ORDER BY timestamp DESC 
-            LIMIT 20
-        ''', (user_id,))
-        
-        result = cursor.fetchall()
-        conn.close()
-        return result
-    
-    def use_product(self, user_id, producto_nombre):
-        """Usa un producto del inventario del usuario"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        try:
-            # Verificar que el usuario tiene el producto
-            cursor.execute('''
-                SELECT id FROM inventario 
-                WHERE user_id = ? AND producto_nombre = ? 
-                LIMIT 1
-            ''', (user_id, producto_nombre))
-            
-            item = cursor.fetchone()
-            if not item:
-                conn.close()
-                return False, "No tienes este producto en tu inventario"
-            
-            # Obtener información del producto (especialmente role_id)
-            cursor.execute('SELECT role_id FROM productos WHERE nombre = ?', (producto_nombre,))
-            product_info = cursor.fetchone()
-            
-            if not product_info:
-                # Si el producto ya no existe en la tienda, buscar en inventario histórico
-                role_id = None
-            else:
-                role_id = product_info[0]
-            
-            # Eliminar el producto del inventario
-            cursor.execute('DELETE FROM inventario WHERE id = ?', (item[0],))
-            
-            # Registrar el uso
-            cursor.execute('''
-                INSERT INTO transacciones (user_id, tipo, descripcion)
-                VALUES (?, ?, ?)
-            ''', (user_id, 'USO_PRODUCTO', f'Uso de producto: {producto_nombre}'))
-            
-            conn.commit()
-            conn.close()
-            
-            return True, role_id
-            
-        except Exception as e:
-            conn.rollback()
-            conn.close()
-            return False, f"Error al usar producto: {str(e)}"
-    
-    def add_product(self, nombre, precio, cantidad, role_id=None):
-        """Agrega un producto a la tienda"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        try:
-            cursor.execute('''
-                INSERT INTO productos (nombre, precio, cantidad, role_id)
-                VALUES (?, ?, ?, ?)
-            ''', (nombre, float(precio), cantidad, role_id))
-            conn.commit()
-            conn.close()
-            return True
-        except sqlite3.IntegrityError:
-            conn.close()
-            return False
-    
-    def get_all_products(self):
-        """Obtiene todos los productos disponibles"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT nombre, precio, cantidad, role_id FROM productos WHERE cantidad > 0')
-        result = cursor.fetchall()
-        conn.close()
-        return result
-    
-    def get_product(self, nombre):
-        """Obtiene un producto específico"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT nombre, precio, cantidad, role_id FROM productos WHERE nombre = ?', (nombre,))
-        result = cursor.fetchone()
-        conn.close()
-        return result
-    
-    def update_product(self, nombre, nuevo_precio=None, nueva_cantidad=None):
-        """Actualiza un producto"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        if nuevo_precio is not None and nueva_cantidad is not None:
-            cursor.execute('UPDATE productos SET precio = ?, cantidad = ? WHERE nombre = ?', 
-                         (float(nuevo_precio), nueva_cantidad, nombre))
-        elif nuevo_precio is not None:
-            cursor.execute('UPDATE productos SET precio = ? WHERE nombre = ?', 
-                         (float(nuevo_precio), nombre))
-        elif nueva_cantidad is not None:
-            cursor.execute('UPDATE productos SET cantidad = ? WHERE nombre = ?', 
-                         (nueva_cantidad, nombre))
-        
-        conn.commit()
-        affected = cursor.rowcount
-        conn.close()
-        return affected > 0
-    
-    def delete_product(self, nombre):
-        """Elimina un producto"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM productos WHERE nombre = ?', (nombre,))
-        conn.commit()
-        affected = cursor.rowcount
-        conn.close()
-        return affected > 0
-    
-    def purchase_product(self, user_id, producto_nombre, precio):
-        """Procesa la compra de un producto"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        try:
-            # Verificar y actualizar stock
-            cursor.execute('SELECT cantidad FROM productos WHERE nombre = ?', (producto_nombre,))
-            result = cursor.fetchone()
-            
-            if not result or result[0] <= 0:
-                conn.close()
-                return False, "Producto sin stock"
-            
-            # Reducir stock
-            nueva_cantidad = result[0] - 1
-            cursor.execute('UPDATE productos SET cantidad = ? WHERE nombre = ?', 
-                         (nueva_cantidad, producto_nombre))
-            
-            # Si el stock llega a 0, NO eliminar producto para mantener el role_id
-            
-            # Actualizar saldo del usuario
-            cursor.execute('SELECT saldo FROM usuarios WHERE user_id = ?', (user_id,))
-            saldo_actual = cursor.fetchone()[0]
-            nuevo_saldo = saldo_actual - float(precio)
-            
-            cursor.execute('UPDATE usuarios SET saldo = ? WHERE user_id = ?', 
-                         (nuevo_saldo, user_id))
-            
-            # Agregar al inventario
-            cursor.execute('''
-                INSERT INTO inventario (user_id, producto_nombre, precio_compra)
-                VALUES (?, ?, ?)
-            ''', (user_id, producto_nombre, float(precio)))
-            
-            # Registrar transacción
-            cursor.execute('''
-                INSERT INTO transacciones (user_id, tipo, monto, descripcion)
-                VALUES (?, ?, ?, ?)
-            ''', (user_id, 'COMPRA', float(precio), f'Compra: {producto_nombre}'))
-            
-            conn.commit()
-            conn.close()
-            return True, "Compra exitosa"
-            
-        except Exception as e:
-            conn.rollback()
-            conn.close()
-            return False, f"Error en la compra: {str(e)}"
-    
-    def get_user_inventory(self, user_id):
-        """Obtiene el inventario de un usuario"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT i.producto_nombre, COUNT(*) as cantidad, AVG(i.precio_compra) as precio_promedio, p.role_id
-            FROM inventario i
-            LEFT JOIN productos p ON i.producto_nombre = p.nombre
-            WHERE i.user_id = ? 
-            GROUP BY i.producto_nombre
-            ORDER BY i.fecha_compra DESC
-        ''', (user_id,))
-        
-        result = cursor.fetchall()
-        conn.close()
-        return result
-
+from database import (
+    get_user_balance, 
+    update_user_balance, 
+    add_transaction, 
+    get_user_transactions,
+    use_product,
+    add_product,
+    get_all_products,
+    get_product,
+    update_product,
+    delete_product,
+    purchase_product,
+    get_user_inventory,
+    get_economia_stats
+)
 
 class ConfirmPurchaseView(View):
-    def __init__(self, user_id, producto, precio, database):
+    def __init__(self, user_id, producto, precio):
         super().__init__(timeout=30)
         self.user_id = user_id
         self.producto = producto
         self.precio = precio
-        self.database = database
     
     @discord.ui.button(label='✅ Confirmar', style=discord.ButtonStyle.green)
     async def confirm(self, interaction: discord.Interaction, button: Button):
@@ -336,7 +37,7 @@ class ConfirmPurchaseView(View):
             return
         
         # Verificar saldo nuevamente
-        saldo_actual = self.database.get_user_balance(self.user_id)
+        saldo_actual = await database.get_user_balance(self.user_id)
         if saldo_actual < self.precio:
             embed = discord.Embed(
                 title="❌ Saldo insuficiente",
@@ -347,10 +48,10 @@ class ConfirmPurchaseView(View):
             return
         
         # Procesar compra
-        success, message = self.database.purchase_product(self.user_id, self.producto, self.precio)
+        success, message = await database.purchase_product(self.user_id, self.producto, self.precio)
         
         if success:
-            nuevo_saldo = self.database.get_user_balance(self.user_id)
+            nuevo_saldo = await database.get_user_balance(self.user_id)
             embed = discord.Embed(
                 title="✅ Compra exitosa",
                 description=f"Has comprado **{self.producto}** por €{self.precio:.2f}\nSaldo restante: €{nuevo_saldo:.2f}",
@@ -382,7 +83,6 @@ class ConfirmPurchaseView(View):
 class Economia(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.db = EconomiaDatabase()
         
         # Configuración - IDs configurados
         self.LOG_CHANNEL_ID = 1400106793811705863
@@ -445,10 +145,10 @@ class Economia(commands.Cog):
                 await ctx.send("❌ El monto debe ser positivo.")
                 return
             
-            saldo_actual = self.db.get_user_balance(usuario.id)
+            saldo_actual = await database.get_user_balance(usuario.id)
             nuevo_saldo = saldo_actual + monto_decimal
             
-            self.db.update_user_balance(
+            await database.update_user_balance(
                 usuario.id, 
                 nuevo_saldo, 
                 ctx.author.id, 
@@ -483,7 +183,7 @@ class Economia(commands.Cog):
                 await ctx.send("❌ El monto debe ser positivo.")
                 return
             
-            saldo_actual = self.db.get_user_balance(usuario.id)
+            saldo_actual = await database.get_user_balance(usuario.id)
             nuevo_saldo = saldo_actual - monto_decimal
             
             if nuevo_saldo < 0:
@@ -501,7 +201,7 @@ class Economia(commands.Cog):
                     await ctx.send("❌ Tiempo de espera agotado. Operación cancelada.")
                     return
             
-            self.db.update_user_balance(
+            await database.update_user_balance(
                 usuario.id, 
                 nuevo_saldo, 
                 ctx.author.id, 
@@ -536,9 +236,9 @@ class Economia(commands.Cog):
                 await ctx.send("❌ El saldo no puede ser negativo.")
                 return
             
-            saldo_actual = self.db.get_user_balance(usuario.id)
+            saldo_actual = await database.get_user_balance(usuario.id)
             
-            self.db.update_user_balance(
+            await database.update_user_balance(
                 usuario.id, 
                 monto_decimal, 
                 ctx.author.id, 
@@ -566,7 +266,7 @@ class Economia(commands.Cog):
             await ctx.send("❌ No tienes permisos para usar este comando.")
             return
         
-        transacciones = self.db.get_user_transactions(usuario.id)
+        transacciones = await database.get_user_transactions(usuario.id)
         
         if not transacciones:
             embed = discord.Embed(
@@ -584,7 +284,7 @@ class Economia(commands.Cog):
         )
         
         for i, (tipo, monto, descripcion, timestamp, ejecutado_por) in enumerate(transacciones[:10]):
-            fecha = datetime.fromisoformat(timestamp).strftime("%d/%m/%Y %H:%M")
+            fecha = timestamp.strftime("%d/%m/%Y %H:%M")
             monto_str = f"€{monto:.2f}" if monto else "N/A"
             
             embed.add_field(
@@ -593,7 +293,7 @@ class Economia(commands.Cog):
                 inline=False
             )
         
-        saldo_actual = self.db.get_user_balance(usuario.id)
+        saldo_actual = await database.get_user_balance(usuario.id)
         embed.set_footer(text=f"Saldo actual: €{saldo_actual:.2f}")
         
         await ctx.send(embed=embed)
@@ -603,7 +303,7 @@ class Economia(commands.Cog):
     @commands.command(name="saldo")
     async def saldo(self, ctx):
         """Muestra el saldo actual del usuario"""
-        saldo = self.db.get_user_balance(ctx.author.id)
+        saldo = await database.get_user_balance(ctx.author.id)
         
         embed = discord.Embed(
             title="💰 Tu saldo",
@@ -617,7 +317,7 @@ class Economia(commands.Cog):
     @commands.command(name="inventario")
     async def inventario(self, ctx):
         """Muestra el inventario del usuario"""
-        inventario = self.db.get_user_inventory(ctx.author.id)
+        inventario = await database.get_user_inventory(ctx.author.id)
         
         if not inventario:
             embed = discord.Embed(
@@ -727,7 +427,7 @@ class Economia(commands.Cog):
             
             precio_decimal = Decimal(str(precio)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             
-            if self.db.add_product(nombre, precio_decimal, cantidad, role_id):
+            if await database.add_product(nombre, precio_decimal, cantidad, role_id):
                 embed = discord.Embed(
                     title="✅ Producto agregado",
                     description=f"**{nombre}** ha sido agregado a la tienda",
@@ -787,7 +487,7 @@ class Economia(commands.Cog):
             if len(remaining) >= 2:
                 nueva_cantidad = int(remaining[1])
             
-            if self.db.update_product(nombre, nuevo_precio, nueva_cantidad):
+            if await database.update_product(nombre, nuevo_precio, nueva_cantidad):
                 embed = discord.Embed(
                     title="✅ Producto actualizado",
                     description=f"**{nombre}** ha sido actualizado",
@@ -824,7 +524,7 @@ class Economia(commands.Cog):
         if nombre.startswith('"') and nombre.endswith('"'):
             nombre = nombre[1:-1]
         
-        if self.db.delete_product(nombre):
+        if await database.delete_product(nombre):
             embed = discord.Embed(
                 title="✅ Producto eliminado",
                 description=f"**{nombre}** ha sido eliminado de la tienda",
@@ -841,7 +541,7 @@ class Economia(commands.Cog):
     @commands.command(name="tienda")
     async def tienda(self, ctx):
         """Muestra el catálogo de productos disponibles"""
-        productos = self.db.get_all_products()
+        productos = await database.get_all_products()
         
         if not productos:
             embed = discord.Embed(
@@ -886,7 +586,7 @@ class Economia(commands.Cog):
             nombre = nombre[1:-1]
         
         # Verificar que el producto existe
-        producto = self.db.get_product(nombre)
+        producto = await database.get_product(nombre)
         if not producto:
             await ctx.send("❌ Producto no encontrado.")
             return
@@ -899,7 +599,7 @@ class Economia(commands.Cog):
             return
         
         # Verificar saldo del usuario
-        saldo_actual = self.db.get_user_balance(ctx.author.id)
+        saldo_actual = await database.get_user_balance(ctx.author.id)
         if saldo_actual < precio_decimal:
             embed = discord.Embed(
                 title="❌ Saldo insuficiente",
@@ -930,7 +630,7 @@ class Economia(commands.Cog):
                     inline=False
                 )
         
-        view = ConfirmPurchaseView(ctx.author.id, nombre_producto, precio_decimal, self.db)
+        view = ConfirmPurchaseView(ctx.author.id, nombre_producto, precio_decimal)
         await ctx.send(embed=embed, view=view)
     
     @commands.command(name="use")
@@ -941,7 +641,7 @@ class Economia(commands.Cog):
             nombre = nombre[1:-1]
         
         # Verificar que el usuario tiene el producto en su inventario
-        inventario = self.db.get_user_inventory(ctx.author.id)
+        inventario = await database.get_user_inventory(ctx.author.id)
         producto_encontrado = None
         
         for producto, cantidad, precio_promedio, role_id in inventario:
@@ -972,7 +672,7 @@ class Economia(commands.Cog):
             return
         
         # Usar el producto
-        success, result = self.db.use_product(ctx.author.id, producto_nombre)
+        success, result = await database.use_product(ctx.author.id, producto_nombre)
         
         if not success:
             await ctx.send(f"❌ {result}")
@@ -1041,7 +741,7 @@ class Economia(commands.Cog):
                 return
             
             # Verificar saldo
-            saldo_actual = self.db.get_user_balance(ctx.author.id)
+            saldo_actual = await database.get_user_balance(ctx.author.id)
             if saldo_actual < monto_decimal:
                 await ctx.send(f"❌ Saldo insuficiente. Tu saldo actual es €{saldo_actual:.2f}")
                 return
@@ -1070,8 +770,8 @@ class Economia(commands.Cog):
                 
                 if str(reaction.emoji) == "✅":
                     # Procesar transferencia
-                    saldo_emisor = self.db.get_user_balance(ctx.author.id)
-                    saldo_receptor = self.db.get_user_balance(usuario.id)
+                    saldo_emisor = await database.get_user_balance(ctx.author.id)
+                    saldo_receptor = await database.get_user_balance(usuario.id)
                     
                     if saldo_emisor < monto_decimal:
                         await ctx.send("❌ El emisor ya no tiene saldo suficiente.")
@@ -1081,7 +781,7 @@ class Economia(commands.Cog):
                     nuevo_saldo_emisor = saldo_emisor - monto_decimal
                     nuevo_saldo_receptor = saldo_receptor + monto_decimal
                     
-                    self.db.update_user_balance(
+                    await database.update_user_balance(
                         ctx.author.id, 
                         nuevo_saldo_emisor, 
                         staff_user.id, 
@@ -1089,7 +789,7 @@ class Economia(commands.Cog):
                         f'Transferencia de €{monto_decimal:.2f} a {usuario} (aprobada por {staff_user})'
                     )
                     
-                    self.db.update_user_balance(
+                    await database.update_user_balance(
                         usuario.id, 
                         nuevo_saldo_receptor, 
                         staff_user.id, 
@@ -1137,37 +837,7 @@ class Economia(commands.Cog):
             return
         
         try:
-            conn = sqlite3.connect(self.db.db_path)
-            cursor = conn.cursor()
-            
-            # Total de dinero en circulación
-            cursor.execute('SELECT SUM(saldo) FROM usuarios')
-            total_dinero = cursor.fetchone()[0] or 0
-            
-            # Número de usuarios con saldo
-            cursor.execute('SELECT COUNT(*) FROM usuarios WHERE saldo > 0')
-            usuarios_con_saldo = cursor.fetchone()[0] or 0
-            
-            # Total de usuarios registrados
-            cursor.execute('SELECT COUNT(*) FROM usuarios')
-            total_usuarios = cursor.fetchone()[0] or 0
-            
-            # Productos en tienda
-            cursor.execute('SELECT COUNT(*) FROM productos')
-            total_productos = cursor.fetchone()[0] or 0
-            
-            # Valor total del inventario en tienda
-            cursor.execute('SELECT SUM(precio * cantidad) FROM productos')
-            valor_tienda = cursor.fetchone()[0] or 0
-            
-            # Transacciones del día
-            cursor.execute('''
-                SELECT COUNT(*) FROM transacciones 
-                WHERE DATE(timestamp) = DATE('now')
-            ''')
-            transacciones_hoy = cursor.fetchone()[0] or 0
-            
-            conn.close()
+            stats = await database.get_economia_stats()
             
             embed = discord.Embed(
                 title="📊 Estadísticas del Sistema Económico",
@@ -1176,25 +846,25 @@ class Economia(commands.Cog):
             
             embed.add_field(
                 name="💰 Dinero en circulación",
-                value=f"€{total_dinero:.2f}",
+                value=f"€{stats['total_dinero']:.2f}",
                 inline=True
             )
             
             embed.add_field(
                 name="👥 Usuarios registrados",
-                value=f"{total_usuarios} total\n{usuarios_con_saldo} con saldo",
+                value=f"{stats['total_usuarios']} total\n{stats['usuarios_con_saldo']} con saldo",
                 inline=True
             )
             
             embed.add_field(
                 name="🏪 Tienda",
-                value=f"{total_productos} productos\n€{valor_tienda:.2f} valor total",
+                value=f"{stats['total_productos']} productos\n€{stats['valor_tienda']:.2f} valor total",
                 inline=True
             )
             
             embed.add_field(
                 name="📈 Actividad hoy",
-                value=f"{transacciones_hoy} transacciones",
+                value=f"{stats['transacciones_hoy']} transacciones",
                 inline=True
             )
             
@@ -1205,30 +875,27 @@ class Economia(commands.Cog):
     
     @commands.command(name="backup_economia")
     async def backup_economia(self, ctx):
-        """Crea un backup de la base de datos económica"""
+        """Crea un backup de la base de datos económica (solo informativo para PostgreSQL)"""
         if not self.is_admin_or_staff(ctx):
             await ctx.send("❌ No tienes permisos para usar este comando.")
             return
         
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_filename = f"economia_backup_{timestamp}.db"
-            
-            # Crear copia de la base de datos
-            import shutil
-            shutil.copy2(self.db.db_path, backup_filename)
             
             embed = discord.Embed(
-                title="✅ Backup creado",
-                description=f"Backup guardado como: `{backup_filename}`",
-                color=0x00ff00
+                title="ℹ️ Backup PostgreSQL",
+                description=f"Para crear un backup de PostgreSQL, usa:\n"
+                           f"`pg_dump {os.getenv('DATABASE_URL', 'DATABASE_URL')} > backup_{timestamp}.sql`\n\n"
+                           f"O contacta con el administrador del servidor.",
+                color=0x3498db
             )
             
             await ctx.send(embed=embed)
-            await self.log_operation(ctx, "Backup creado", f"Archivo: {backup_filename}")
+            await self.log_operation(ctx, "Backup solicitado", f"Timestamp: {timestamp}")
             
         except Exception as e:
-            await ctx.send(f"❌ Error al crear backup: {str(e)}")
+            await ctx.send(f"❌ Error: {str(e)}")
     
     @commands.command(name="help_economia")
     async def help_economia(self, ctx):
@@ -1247,7 +914,7 @@ class Economia(commands.Cog):
                       "`!setear_dinero @usuario monto` - Establecer saldo\n"
                       "`!historial @usuario` - Ver transacciones\n"
                       "`!economia_stats` - Ver estadísticas\n"
-                      "`!backup_economia` - Crear backup",
+                      "`!backup_economia` - Info sobre backup",
                 inline=False
             )
             
