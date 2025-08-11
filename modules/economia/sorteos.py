@@ -159,12 +159,15 @@ class Sorteos(commands.Cog):
             # Limpiar canal nuevamente
             await canal.purge(limit=100)
             
-            # Anunciar ganador
+            # Anunciar ganador con mención al rol
             embed_ganador = self.crear_embed_ganador(ganador)
-            await canal.send(embed=embed_ganador)
+            await canal.send(
+                content=f"🎉 {rol.mention} ¡EL SORTEO HA TERMINADO!\n\n🏆 **GANADOR:** {ganador.mention}\n💰 **Se han añadido €1.00 a tu cuenta!**",
+                embed=embed_ganador
+            )
             
-            # Esperar 10 segundos y empezar nueva ronda
-            await asyncio.sleep(10)
+            # Esperar 5 minutos antes de limpiar y empezar nueva ronda
+            await asyncio.sleep(300)  # 300 segundos = 5 minutos
             await canal.purge(limit=100)
             
             # Enviar embed para nueva ronda
