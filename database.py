@@ -12,7 +12,7 @@ pool = None
 async def create_pool():
     return await asyncpg.create_pool(DB_URL, ssl="require")
 
-async def init_database():
+async def connect_db():
     global pool
     pool = await create_pool()
     
