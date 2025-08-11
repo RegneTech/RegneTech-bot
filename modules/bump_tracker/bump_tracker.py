@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 
 # Importar funciones de base de datos
-from database import add_bump, get_bumps, get_all_bumps
+import database
 
 # Configuración del Bump Tracker
 DISBOARD_BOT_ID = 302050872383242240
