@@ -2,6 +2,7 @@ import os
 import asyncio
 from discord.ext import commands
 from dotenv import load_dotenv
+from database import connect_db   # 👈 Importar la función de conexión
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -44,7 +45,7 @@ async def load_cogs():
     for module in MODULES:
         try:
             await bot.load_extension(module)
-            module_name = module.split('.')[-1]  # Obtener solo el nombre del módulo
+            module_name = module.split('.')[-1]
             print(f"✅ Módulo '{module_name}' cargado correctamente")
             loaded_count += 1
         except Exception as e:
@@ -57,10 +58,8 @@ async def load_cogs():
     if loaded_count == 0:
         print("⚠️ Advertencia: No se cargó ningún módulo. El bot funcionará con comandos básicos solamente.")
 
-# Comando básico de prueba (siempre disponible)
 @bot.command(name="ping")
 async def ping(ctx):
-    """Comando de prueba básico"""
     latency = round(bot.latency * 1000)
     embed = discord.Embed(
         title="🏓 Pong!",
@@ -71,7 +70,6 @@ async def ping(ctx):
 
 @bot.command(name="info")
 async def bot_info(ctx):
-    """Información básica del bot"""
     embed = discord.Embed(
         title="🤖 Información del Bot",
         description="Bot multiusos para Discord",
@@ -83,28 +81,20 @@ async def bot_info(ctx):
     embed.set_footer(text=f"Bot: {bot.user.name}")
     await ctx.send(embed=embed)
 
-# Comando para recargar módulos (solo para desarrollo)
 @bot.command(name="reload")
 @commands.is_owner()
 async def reload_cogs(ctx):
-    """Recarga todos los módulos (solo owner)"""
     await ctx.send("🔄 Recargando módulos...")
-    
-    # Descargar módulos existentes
     for module in list(bot.extensions.keys()):
         try:
             await bot.unload_extension(module)
         except:
             pass
-    
-    # Cargar módulos nuevamente
     await load_cogs()
     await ctx.send("✅ Módulos recargados")
 
-# Manejo de errores globales
 @bot.event
 async def on_command_error(ctx, error):
-    """Manejo global de errores de comandos"""
     if isinstance(error, commands.CommandNotFound):
         embed = discord.Embed(
             title="❌ Comando no encontrado",
@@ -112,7 +102,6 @@ async def on_command_error(ctx, error):
             color=0xff0000
         )
         await ctx.send(embed=embed)
-    
     elif isinstance(error, commands.MissingPermissions):
         embed = discord.Embed(
             title="🚫 Sin permisos",
@@ -120,7 +109,6 @@ async def on_command_error(ctx, error):
             color=0xff0000
         )
         await ctx.send(embed=embed)
-    
     elif isinstance(error, commands.CommandOnCooldown):
         embed = discord.Embed(
             title="⏰ Comando en cooldown",
@@ -128,9 +116,7 @@ async def on_command_error(ctx, error):
             color=0xffa500
         )
         await ctx.send(embed=embed)
-    
     else:
-        # Log de errores no manejados
         print(f"Error no manejado en comando {ctx.command}: {error}")
         embed = discord.Embed(
             title="⚠️ Error interno",
@@ -141,42 +127,31 @@ async def on_command_error(ctx, error):
 
 @bot.event
 async def on_ready():
-    """Evento cuando el bot se conecta"""
     print(f"✅ Bot conectado como {bot.user}")
     print(f"📊 Conectado a {len(bot.guilds)} servidores")
     print(f"👥 Alcance: {len(bot.users)} usuarios")
     print("─" * 50)
-    
-    # Cargar módulos después de que el bot esté listo
     await load_cogs()
-    
     print("─" * 50)
     print("🚀 Bot listo para usar!")
 
 @bot.event
 async def on_guild_join(guild):
-    """Evento cuando el bot se une a un servidor"""
     print(f"✅ Bot añadido al servidor: {guild.name} (ID: {guild.id})")
 
 @bot.event
 async def on_guild_remove(guild):
-    """Evento cuando el bot es removido de un servidor"""
     print(f"❌ Bot removido del servidor: {guild.name} (ID: {guild.id})")
 
-# Función principal asíncrona
 async def main():
-    """Función principal del bot"""
     print("🤖 Iniciando bot...")
     print("─" * 50)
 
     try:
-        # 🔹 Conectar a la base de datos antes de iniciar el bot
         await connect_db()
         print("✅ Base de datos conectada")
-
         async with bot:
             await bot.start(TOKEN)
-
     except discord.LoginFailure:
         print("❌ Error: Token de Discord inválido")
     except discord.HTTPException as e:
