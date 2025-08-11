@@ -7,21 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import asyncio
 import os
 import re
-from database import (
-    get_user_balance, 
-    update_user_balance, 
-    add_transaction, 
-    get_user_transactions,
-    use_product,
-    add_product,
-    get_all_products,
-    get_product,
-    update_product,
-    delete_product,
-    purchase_product,
-    get_user_inventory,
-    get_economia_stats
-)
+import database
 
 class ConfirmPurchaseView(View):
     def __init__(self, user_id, producto, precio):
