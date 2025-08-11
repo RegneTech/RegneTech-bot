@@ -168,10 +168,15 @@ async def main():
     """Función principal del bot"""
     print("🤖 Iniciando bot...")
     print("─" * 50)
-    
+
     try:
+        # 🔹 Conectar a la base de datos antes de iniciar el bot
+        await connect_db()
+        print("✅ Base de datos conectada")
+
         async with bot:
             await bot.start(TOKEN)
+
     except discord.LoginFailure:
         print("❌ Error: Token de Discord inválido")
     except discord.HTTPException as e:
