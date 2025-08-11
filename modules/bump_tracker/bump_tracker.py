@@ -2,9 +2,7 @@ import discord
 from discord.ext import commands
 import asyncio
 from datetime import datetime, timezone
-
-# Importar funciones de base de datos
-import database
+from database import add_bump, get_bumps, get_all_bumps
 
 # Configuración del Bump Tracker
 DISBOARD_BOT_ID = 302050872383242240
