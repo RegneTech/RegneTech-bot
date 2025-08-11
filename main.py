@@ -3,7 +3,6 @@ import asyncio
 from discord.ext import commands
 from dotenv import load_dotenv
 
-# Cargar variables de entorno
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
 
