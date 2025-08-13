@@ -27,7 +27,7 @@ class ConfirmPurchaseView(View):
         if saldo_actual < self.precio:
             embed = discord.Embed(
                 title="❌ Saldo insuficiente",
-                description=f"Tu saldo actual es €{saldo_actual:.2f}",
+                description=f"Tu saldo actual es {saldo_actual:.2f}€",
                 color=0xff0000
             )
             await interaction.response.edit_message(embed=embed, view=None)
@@ -40,7 +40,7 @@ class ConfirmPurchaseView(View):
             nuevo_saldo = await database.get_user_balance(self.user_id)
             embed = discord.Embed(
                 title="✅ Compra exitosa",
-                description=f"Has comprado **{self.producto}** por €{self.precio:.2f}\nSaldo restante: €{nuevo_saldo:.2f}",
+                description=f"Has comprado **{self.producto}** por {self.precio:.2f}€\nSaldo restante: {nuevo_saldo:.2f}€",
                 color=0x00ff00
             )
         else:
@@ -139,19 +139,19 @@ class Economia(commands.Cog):
                 nuevo_saldo, 
                 ctx.author.id, 
                 'DEPOSITO', 
-                f'Depósito de €{monto_decimal:.2f} por {ctx.author}'
+                f'Depósito de {monto_decimal:.2f}€ por {ctx.author}'
             )
             
             embed = discord.Embed(
                 title="✅ Dinero agregado",
-                description=f"Se han agregado **€{monto_decimal:.2f}** al saldo de {usuario.mention}\n"
-                           f"Saldo anterior: €{saldo_actual:.2f}\n"
-                           f"Saldo actual: €{nuevo_saldo:.2f}",
+                description=f"Se han agregado **{monto_decimal:.2f}€** al saldo de {usuario.mention}\n"
+                           f"Saldo anterior: {saldo_actual:.2f}€\n"
+                           f"Saldo actual: {nuevo_saldo:.2f}€",
                 color=0x00ff00
             )
             await ctx.send(embed=embed)
             
-            await self.log_operation(ctx, "Depósito", f"€{monto_decimal:.2f} agregados a {usuario.mention}")
+            await self.log_operation(ctx, "Depósito", f"{monto_decimal:.2f}€ agregados a {usuario.mention}")
             
         except Exception as e:
             await ctx.send(f"❌ Error: {str(e)}")
@@ -192,19 +192,19 @@ class Economia(commands.Cog):
                 nuevo_saldo, 
                 ctx.author.id, 
                 'RETIRO', 
-                f'Retiro de €{monto_decimal:.2f} por {ctx.author}'
+                f'Retiro de {monto_decimal:.2f}€ por {ctx.author}'
             )
             
             embed = discord.Embed(
                 title="✅ Dinero retirado",
-                description=f"Se han retirado **€{monto_decimal:.2f}** del saldo de {usuario.mention}\n"
-                           f"Saldo anterior: €{saldo_actual:.2f}\n"
-                           f"Saldo actual: €{nuevo_saldo:.2f}",
+                description=f"Se han retirado **{monto_decimal:.2f}€** del saldo de {usuario.mention}\n"
+                           f"Saldo anterior: {saldo_actual:.2f}€\n"
+                           f"Saldo actual: {nuevo_saldo:.2f}€",
                 color=0xff9900
             )
             await ctx.send(embed=embed)
             
-            await self.log_operation(ctx, "Retiro", f"€{monto_decimal:.2f} retirados de {usuario.mention}")
+            await self.log_operation(ctx, "Retiro", f"{monto_decimal:.2f}€ retirados de {usuario.mention}")
             
         except Exception as e:
             await ctx.send(f"❌ Error: {str(e)}")
@@ -229,18 +229,18 @@ class Economia(commands.Cog):
                 monto_decimal, 
                 ctx.author.id, 
                 'AJUSTE', 
-                f'Saldo establecido a €{monto_decimal:.2f} por {ctx.author}'
+                f'Saldo establecido a {monto_decimal:.2f}€ por {ctx.author}'
             )
             
             embed = discord.Embed(
                 title="✅ Saldo establecido",
-                description=f"El saldo de {usuario.mention} ha sido establecido a **€{monto_decimal:.2f}**\n"
-                           f"Saldo anterior: €{saldo_actual:.2f}",
+                description=f"El saldo de {usuario.mention} ha sido establecido a **{monto_decimal:.2f}€**\n"
+                           f"Saldo anterior: {saldo_actual:.2f}€",
                 color=0x3498db
             )
             await ctx.send(embed=embed)
             
-            await self.log_operation(ctx, "Ajuste de saldo", f"Saldo de {usuario.mention} establecido a €{monto_decimal:.2f}")
+            await self.log_operation(ctx, "Ajuste de saldo", f"Saldo de {usuario.mention} establecido a {monto_decimal:.2f}€")
             
         except Exception as e:
             await ctx.send(f"❌ Error: {str(e)}")
@@ -271,7 +271,7 @@ class Economia(commands.Cog):
         
         for i, (tipo, monto, descripcion, timestamp, ejecutado_por) in enumerate(transacciones[:10]):
             fecha = timestamp.strftime("%d/%m/%Y %H:%M")
-            monto_str = f"€{monto:.2f}" if monto else "N/A"
+            monto_str = f"{monto:.2f}€" if monto else "N/A"
             
             embed.add_field(
                 name=f"{tipo} - {fecha}",
@@ -280,7 +280,7 @@ class Economia(commands.Cog):
             )
         
         saldo_actual = await database.get_user_balance(usuario.id)
-        embed.set_footer(text=f"Saldo actual: €{saldo_actual:.2f}")
+        embed.set_footer(text=f"Saldo actual: {saldo_actual:.2f}€")
         
         await ctx.send(embed=embed)
     
@@ -293,7 +293,7 @@ class Economia(commands.Cog):
         
         embed = discord.Embed(
             title="💰 Tu saldo",
-            description=f"Tienes **€{saldo:.2f}** en tu cuenta",
+            description=f"Tienes **{saldo:.2f}€** en tu cuenta",
             color=0x27ae60
         )
         embed.set_thumbnail(url=ctx.author.avatar.url if ctx.author.avatar else None)
@@ -419,7 +419,7 @@ class Economia(commands.Cog):
                     description=f"**{nombre}** ha sido agregado a la tienda",
                     color=0x00ff00
                 )
-                embed.add_field(name="Precio", value=f"€{precio_decimal:.2f}", inline=True)
+                embed.add_field(name="Precio", value=f"{precio_decimal:.2f}€", inline=True)
                 embed.add_field(name="Cantidad", value=str(cantidad), inline=True)
                 
                 if role_id and role_name:
@@ -428,7 +428,7 @@ class Economia(commands.Cog):
                 
                 await ctx.send(embed=embed)
                 
-                log_details = f"{nombre} - €{precio_decimal:.2f} - {cantidad} unidades"
+                log_details = f"{nombre} - {precio_decimal:.2f}€ - {cantidad} unidades"
                 if role_id and role_name:
                     log_details += f" - Rol: @{role_name}"
                 
@@ -480,7 +480,7 @@ class Economia(commands.Cog):
                     color=0x00ff00
                 )
                 if nuevo_precio:
-                    embed.add_field(name="Nuevo precio", value=f"€{nuevo_precio:.2f}", inline=True)
+                    embed.add_field(name="Nuevo precio", value=f"{nuevo_precio:.2f}€", inline=True)
                 if nueva_cantidad:
                     embed.add_field(name="Nueva cantidad", value=str(nueva_cantidad), inline=True)
                 
@@ -488,7 +488,7 @@ class Economia(commands.Cog):
                 
                 changes = []
                 if nuevo_precio:
-                    changes.append(f"precio: €{nuevo_precio:.2f}")
+                    changes.append(f"precio: {nuevo_precio:.2f}€")
                 if nueva_cantidad:
                     changes.append(f"cantidad: {nueva_cantidad}")
                 
@@ -545,7 +545,7 @@ class Economia(commands.Cog):
         )
         
         for nombre, precio, cantidad, role_id in productos:
-            value_text = f"Precio: €{precio:.2f}\nStock: {cantidad}"
+            value_text = f"Precio: {precio:.2f}€\nStock: {cantidad}"
             
             if role_id:
                 role = discord.utils.get(ctx.guild.roles, id=role_id)
@@ -589,9 +589,9 @@ class Economia(commands.Cog):
         if saldo_actual < precio_decimal:
             embed = discord.Embed(
                 title="❌ Saldo insuficiente",
-                description=f"El producto **{nombre_producto}** cuesta €{precio_decimal:.2f}\n"
-                           f"Tu saldo actual es €{saldo_actual:.2f}\n"
-                           f"Te faltan €{(precio_decimal - saldo_actual):.2f}",
+                description=f"El producto **{nombre_producto}** cuesta {precio_decimal:.2f}€\n"
+                           f"Tu saldo actual es {saldo_actual:.2f}€\n"
+                           f"Te faltan {(precio_decimal - saldo_actual):.2f}€",
                 color=0xff0000
             )
             await ctx.send(embed=embed)
@@ -600,8 +600,8 @@ class Economia(commands.Cog):
         # Mostrar confirmación
         embed = discord.Embed(
             title="🛒 Confirmar compra",
-            description=f"¿Deseas comprar **{nombre_producto}** por €{precio_decimal:.2f}?\n\n"
-                       f"Tu saldo actual: €{saldo_actual:.2f}\n"
+            description=f"¿Deseas comprar **{nombre_producto}** por {precio_decimal:.2f}€?\n\n"
+                       f"Tu saldo actual: {saldo_actual:.2f}€\n"
                        f"Saldo después de la compra: €{(saldo_actual - precio_decimal):.2f}",
             color=0xf39c12
         )
@@ -729,13 +729,13 @@ class Economia(commands.Cog):
             # Verificar saldo
             saldo_actual = await database.get_user_balance(ctx.author.id)
             if saldo_actual < monto_decimal:
-                await ctx.send(f"❌ Saldo insuficiente. Tu saldo actual es €{saldo_actual:.2f}")
+                await ctx.send(f"❌ Saldo insuficiente. Tu saldo actual es {saldo_actual:.2f}€")
                 return
             
             # Solicitar aprobación de staff
             embed = discord.Embed(
                 title="💸 Solicitud de transferencia",
-                description=f"{ctx.author.mention} quiere transferir €{monto_decimal:.2f} a {usuario.mention}\n\n"
+                description=f"{ctx.author.mention} quiere transferir {monto_decimal:.2f}€ a {usuario.mention}\n\n"
                            f"**Staff**: Reacciona con ✅ para aprobar o ❌ para rechazar",
                 color=0xf39c12
             )
@@ -772,7 +772,7 @@ class Economia(commands.Cog):
                         nuevo_saldo_emisor, 
                         staff_user.id, 
                         'TRANSFERENCIA_SALIDA', 
-                        f'Transferencia de €{monto_decimal:.2f} a {usuario} (aprobada por {staff_user})'
+                        f'Transferencia de {monto_decimal:.2f}€ a {usuario} (aprobada por {staff_user})'
                     )
                     
                     await database.update_user_balance(
@@ -780,19 +780,19 @@ class Economia(commands.Cog):
                         nuevo_saldo_receptor, 
                         staff_user.id, 
                         'TRANSFERENCIA_ENTRADA', 
-                        f'Transferencia de €{monto_decimal:.2f} desde {ctx.author} (aprobada por {staff_user})'
+                        f'Transferencia de {monto_decimal:.2f}€ desde {ctx.author} (aprobada por {staff_user})'
                     )
                     
                     embed = discord.Embed(
                         title="✅ Transferencia aprobada",
-                        description=f"€{monto_decimal:.2f} transferidos de {ctx.author.mention} a {usuario.mention}\n"
+                        description=f"{monto_decimal:.2f}€ transferidos de {ctx.author.mention} a {usuario.mention}\n"
                                    f"Aprobado por {staff_user.mention}",
                         color=0x00ff00
                     )
                     await ctx.send(embed=embed)
                     
                     await self.log_operation(ctx, "Transferencia", 
-                                           f"€{monto_decimal:.2f} de {ctx.author.mention} a {usuario.mention} (aprobada por {staff_user.mention})")
+                                           f"{monto_decimal:.2f}€ de {ctx.author.mention} a {usuario.mention} (aprobada por {staff_user.mention})")
                 
                 else:
                     embed = discord.Embed(
@@ -832,7 +832,7 @@ class Economia(commands.Cog):
             
             embed.add_field(
                 name="💰 Dinero en circulación",
-                value=f"€{stats['total_dinero']:.2f}",
+                value=f"{stats['total_dinero']:.2f}€",
                 inline=True
             )
             
@@ -844,7 +844,7 @@ class Economia(commands.Cog):
             
             embed.add_field(
                 name="🏪 Tienda",
-                value=f"{stats['total_productos']} productos\n€{stats['valor_tienda']:.2f} valor total",
+                value=f"{stats['total_productos']} productos\n{stats['valor_tienda']:.2f}€ valor total",
                 inline=True
             )
             
