@@ -340,7 +340,7 @@ class User(commands.Cog):
         self.bot = bot
         print("✅ Cog User inicializado")
     
-    @commands.command(name="menu", aliases=["comandos", "help", "ayuda", "commands", "cmds"])
+    @commands.command(name="menu", aliases=["comandos", "ayuda", "commands", "cmds"])
     async def menu_comandos(self, ctx):
         """Comando mejorado para mostrar el menú de comandos interactivo"""
         
