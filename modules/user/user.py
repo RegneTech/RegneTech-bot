@@ -142,29 +142,32 @@ class ComandoSelect(discord.ui.Select):
         )
     
     async def callback(self, interaction: discord.Interaction):
-        index = int(self.values[0])
-        cmd = self.categoria_data["comandos"][index]
-        
-        embed = discord.Embed(
-            title=f"{self.categoria_data['emoji']} Comando: {cmd['comando']}",
-            description=f"**📝 Descripción:**\n{cmd['descripcion']}",
-            color=self.categoria_data["color"]
-        )
-        embed.add_field(
-            name="💡 Ejemplo de uso:",
-            value=f"`{cmd['uso']}`",
-            inline=False
-        )
-        embed.add_field(
-            name="📂 Categoría:",
-            value=self.categoria_nombre,
-            inline=True
-        )
-        embed.set_footer(text="💡 Los parámetros entre [] son opcionales, entre \"\" son obligatorios")
-        
-        # Crear vista con botón para volver
-        view = ComandoDetalleView(self.categoria_nombre, self.categoria_data)
-        await interaction.response.edit_message(embed=embed, view=view)
+        try:
+            index = int(self.values[0])
+            cmd = self.categoria_data["comandos"][index]
+            
+            embed = discord.Embed(
+                title=f"{self.categoria_data['emoji']} Comando: {cmd['comando']}",
+                description=f"**📝 Descripción:**\n{cmd['descripcion']}",
+                color=self.categoria_data["color"]
+            )
+            embed.add_field(
+                name="💡 Ejemplo de uso:",
+                value=f"{cmd['uso']}",
+                inline=False
+            )
+            embed.add_field(
+                name="📂 Categoría:",
+                value=self.categoria_nombre,
+                inline=True
+            )
+            embed.set_footer(text="💡 Los parámetros entre [] son opcionales, entre \"\" son obligatorios")
+            
+            # Crear vista con botón para volver
+            view = ComandoDetalleView(self.categoria_nombre, self.categoria_data)
+            await interaction.response.edit_message(embed=embed, view=view)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
 class ComandoDetalleView(discord.ui.View):
     def __init__(self, categoria_nombre, categoria_data):
@@ -174,15 +177,21 @@ class ComandoDetalleView(discord.ui.View):
     
     @discord.ui.button(label="← Volver a la categoría", style=discord.ButtonStyle.secondary, emoji="🔙")
     async def volver_categoria(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = self.crear_embed_categoria()
-        view = CategoriaDetalleView(self.categoria_nombre, self.categoria_data)
-        await interaction.response.edit_message(embed=embed, view=view)
+        try:
+            embed = self.crear_embed_categoria()
+            view = CategoriaDetalleView(self.categoria_nombre, self.categoria_data)
+            await interaction.response.edit_message(embed=embed, view=view)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
     
     @discord.ui.button(label="🏠 Menú Principal", style=discord.ButtonStyle.primary, emoji="🏠")
     async def menu_principal(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = self.crear_embed_principal()
-        view = CategoriaView()
-        await interaction.response.edit_message(embed=embed, view=view)
+        try:
+            embed = self.crear_embed_principal()
+            view = CategoriaView()
+            await interaction.response.edit_message(embed=embed, view=view)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
     
     def crear_embed_categoria(self):
         comandos_lista = []
@@ -218,18 +227,21 @@ class CategoriaDetalleView(discord.ui.View):
     
     @discord.ui.button(label="🏠 Menú Principal", style=discord.ButtonStyle.primary, emoji="🏠")
     async def menu_principal(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="🤖 Centro de Comandos",
-            description=(
-                "¡Bienvenido al centro de comandos! Aquí encontrarás todas las funcionalidades disponibles.\n\n"
-                f"🎯 **Categorías disponibles:** {len(CATEGORIAS)}\n"
-                f"⚡ **Total de comandos:** {sum(len(cat['comandos']) for cat in CATEGORIAS.values())}\n\n"
-                "**Selecciona una categoría del menú desplegable para explorar:**"
-            ),
-            color=0x2f3136
-        )
-        view = CategoriaView()
-        await interaction.response.edit_message(embed=embed, view=view)
+        try:
+            embed = discord.Embed(
+                title="🤖 Centro de Comandos",
+                description=(
+                    "¡Bienvenido al centro de comandos! Aquí encontrarás todas las funcionalidades disponibles.\n\n"
+                    f"🎯 **Categorías disponibles:** {len(CATEGORIAS)}\n"
+                    f"⚡ **Total de comandos:** {sum(len(cat['comandos']) for cat in CATEGORIAS.values())}\n\n"
+                    "**Selecciona una categoría del menú desplegable para explorar:**"
+                ),
+                color=0x2f3136
+            )
+            view = CategoriaView()
+            await interaction.response.edit_message(embed=embed, view=view)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
 class CategoriaSelect(discord.ui.Select):
     def __init__(self):
@@ -252,23 +264,26 @@ class CategoriaSelect(discord.ui.Select):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        categoria_nombre = self.values[0]
-        categoria_data = CATEGORIAS[categoria_nombre]
-        
-        # Crear lista de comandos con numeración
-        comandos_lista = []
-        for i, cmd in enumerate(categoria_data["comandos"], 1):
-            comandos_lista.append(f"`{i}.` **{cmd['comando']}**\n   └ {cmd['descripcion']}")
-        
-        embed = discord.Embed(
-            title=f"{categoria_data['emoji']} {categoria_nombre}",
-            description=f"*{categoria_data['descripcion']}*\n\n" + "\n\n".join(comandos_lista),
-            color=categoria_data["color"]
-        )
-        embed.set_footer(text=f"📋 {len(categoria_data['comandos'])} comandos disponibles • Selecciona uno para ver detalles")
-        
-        view = CategoriaDetalleView(categoria_nombre, categoria_data)
-        await interaction.response.edit_message(embed=embed, view=view)
+        try:
+            categoria_nombre = self.values[0]
+            categoria_data = CATEGORIAS[categoria_nombre]
+            
+            # Crear lista de comandos con numeración
+            comandos_lista = []
+            for i, cmd in enumerate(categoria_data["comandos"], 1):
+                comandos_lista.append(f"`{i}.` **{cmd['comando']}**\n   └ {cmd['descripcion']}")
+            
+            embed = discord.Embed(
+                title=f"{categoria_data['emoji']} {categoria_nombre}",
+                description=f"*{categoria_data['descripcion']}*\n\n" + "\n\n".join(comandos_lista),
+                color=categoria_data["color"]
+            )
+            embed.set_footer(text=f"📋 {len(categoria_data['comandos'])} comandos disponibles • Selecciona uno para ver detalles")
+            
+            view = CategoriaDetalleView(categoria_nombre, categoria_data)
+            await interaction.response.edit_message(embed=embed, view=view)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
 class CategoriaView(discord.ui.View):
     def __init__(self):
@@ -299,18 +314,21 @@ class CategoriaView(discord.ui.View):
     
     @discord.ui.button(label="🔄 Actualizar", style=discord.ButtonStyle.secondary, emoji="🔄")
     async def actualizar(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(
-            title="🤖 Centro de Comandos",
-            description=(
-                "¡Bienvenido al centro de comandos! Aquí encontrarás todas las funcionalidades disponibles.\n\n"
-                f"🎯 **Categorías disponibles:** {len(CATEGORIAS)}\n"
-                f"⚡ **Total de comandos:** {sum(len(cat['comandos']) for cat in CATEGORIAS.values())}\n\n"
-                "**Selecciona una categoría del menú desplegable para explorar:**"
-            ),
-            color=0x2f3136
-        )
-        view = CategoriaView()
-        await interaction.response.edit_message(embed=embed, view=view)
+        try:
+            embed = discord.Embed(
+                title="🤖 Centro de Comandos",
+                description=(
+                    "¡Bienvenido al centro de comandos! Aquí encontrarás todas las funcionalidades disponibles.\n\n"
+                    f"🎯 **Categorías disponibles:** {len(CATEGORIAS)}\n"
+                    f"⚡ **Total de comandos:** {sum(len(cat['comandos']) for cat in CATEGORIAS.values())}\n\n"
+                    "**Selecciona una categoría del menú desplegable para explorar:**"
+                ),
+                color=0x2f3136
+            )
+            view = CategoriaView()
+            await interaction.response.edit_message(embed=embed, view=view)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Error: {e}", ephemeral=True)
 
     async def on_timeout(self):
         # Deshabilitar todos los componentes cuando expire el timeout
@@ -320,40 +338,62 @@ class CategoriaView(discord.ui.View):
 class User(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        print("✅ Cog User inicializado")
     
-    @commands.command(name="comandos", aliases=["help", "ayuda", "commands"])
-    async def comandos(self, ctx):
+    @commands.command(name="menu", aliases=["comandos", "help", "ayuda", "commands", "cmds"])
+    async def menu_comandos(self, ctx):
         """Comando mejorado para mostrar el menú de comandos interactivo"""
         
-        embed = discord.Embed(
-            title="🤖 Centro de Comandos",
-            description=(
-                "¡Bienvenido al centro de comandos! Aquí encontrarás todas las funcionalidades disponibles.\n\n"
-                f"🎯 **Categorías disponibles:** {len(CATEGORIAS)}\n"
-                f"⚡ **Total de comandos:** {sum(len(cat['comandos']) for cat in CATEGORIAS.values())}\n\n"
-                "**Selecciona una categoría del menú desplegable para explorar:**"
-            ),
-            color=0x2f3136
-        )
+        print(f"🔍 Comando menu ejecutado por {ctx.author} en {ctx.guild}")
         
-        # Agregar campo con preview de categorías
-        categorias_preview = []
-        for cat_name, cat_data in CATEGORIAS.items():
-            categorias_preview.append(f"{cat_data['emoji']} **{cat_name.split(' ', 1)[1]}** - {len(cat_data['comandos'])} comandos")
-        
-        embed.add_field(
-            name="📋 Vista Rápida:",
-            value="\n".join(categorias_preview),
-            inline=False
-        )
-        
-        embed.set_footer(
-            text=f"Solicitado por {ctx.author.display_name} • Usa los botones y menús para navegar",
-            icon_url=ctx.author.display_avatar.url
-        )
-        embed.set_thumbnail(url=self.bot.user.display_avatar.url)
-        
-        await ctx.send(embed=embed, view=CategoriaView())
+        try:
+            embed = discord.Embed(
+                title="🤖 Centro de Comandos",
+                description=(
+                    "¡Bienvenido al centro de comandos! Aquí encontrarás todas las funcionalidades disponibles.\n\n"
+                    f"🎯 **Categorías disponibles:** {len(CATEGORIAS)}\n"
+                    f"⚡ **Total de comandos:** {sum(len(cat['comandos']) for cat in CATEGORIAS.values())}\n\n"
+                    "**Selecciona una categoría del menú desplegable para explorar:**"
+                ),
+                color=0x2f3136
+            )
+            
+            # Agregar campo con preview de categorías
+            categorias_preview = []
+            for cat_name, cat_data in CATEGORIAS.items():
+                categorias_preview.append(f"{cat_data['emoji']} **{cat_name.split(' ', 1)[1]}** - {len(cat_data['comandos'])} comandos")
+            
+            embed.add_field(
+                name="📋 Vista Rápida:",
+                value="\n".join(categorias_preview),
+                inline=False
+            )
+            
+            embed.set_footer(
+                text=f"Solicitado por {ctx.author.display_name} • Usa los botones y menús para navegar",
+                icon_url=ctx.author.display_avatar.url
+            )
+            
+            if self.bot.user:
+                embed.set_thumbnail(url=self.bot.user.display_avatar.url)
+            
+            await ctx.send(embed=embed, view=CategoriaView())
+            print("✅ Menú enviado exitosamente")
+            
+        except Exception as e:
+            print(f"❌ Error en comando menu: {e}")
+            await ctx.send(f"❌ Error al cargar el menú: {e}")
 
+    @commands.command(name="test")
+    async def test_comando(self, ctx):
+        """Comando de prueba simple"""
+        await ctx.send("✅ ¡El cog está funcionando correctamente!")
+
+# Función de carga del cog
 async def setup(bot: commands.Bot):
     await bot.add_cog(User(bot))
+    print("✅ Cog User cargado correctamente")
+
+# Función para remover el cog
+async def teardown(bot: commands.Bot):
+    print("❌ Cog User descargado")
