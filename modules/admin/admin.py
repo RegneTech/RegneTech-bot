@@ -403,10 +403,10 @@ class AdminCommands(commands.Cog):
     # ────────────────────────────────────────────────────────────
     # Comando de test para verificar que el módulo funciona
     # ────────────────────────────────────────────────────────────
-    
-    @commands.command(name="comandos")
+
+    @commands.command(name="acomandos")
     @commands.has_permissions(administrator=True)
-    async def comandos(self, ctx):
+    async def acomandos(self, ctx):
         """Comando de prueba para administradores"""
         embed = discord.Embed(
             title="Menu de Comandos de Administración",
