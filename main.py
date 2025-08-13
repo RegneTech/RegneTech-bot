@@ -20,7 +20,7 @@ intents.message_content = True
 intents.invites = True 
 
 # Crear instancia del bot
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(command_prefix=":", intents=intents)
 
 # Lista de módulos a cargar
 MODULES = [
@@ -99,7 +99,7 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandNotFound):
         embed = discord.Embed(
             title="❌ Comando no encontrado",
-            description=f"El comando `{ctx.invoked_with}` no existe.\nUsa `!comandos` para ver comandos disponibles.",
+            description=f"El comando `{ctx.invoked_with}` no existe.\nUsa `:comandos` para ver comandos disponibles.",
             color=0xff0000
         )
         await ctx.send(embed=embed)
