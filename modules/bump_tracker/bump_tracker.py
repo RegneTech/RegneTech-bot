@@ -2,7 +2,7 @@ import discord
 from discord.ext import commands
 import asyncio
 from datetime import datetime, timezone
-from database import add_bump, get_bumps, get_all_bumps  # ← CAMBIO AQUÍ
+from database import add_bump, get_bumps, get_all_bumps
 
 # Configuración del Bump Tracker
 DISBOARD_BOT_ID = 302050872383242240
@@ -18,9 +18,9 @@ class BumpTracker(commands.Cog):
         self.tasks: dict[int, asyncio.Task] = {}
         self.pending_bumps: dict[int, int] = {}  # guild_id → user_id que ejecutó el bump
 
-    # ────────────────────────────────
+    # ────────────────────────────────────────
     # Comando de ayuda para bumps
-    # ────────────────────────────────
+    # ────────────────────────────────────────
     @commands.command(name="help_bumps")
     async def help_bumps(self, ctx: commands.Context):
         """Muestra todos los comandos disponibles del sistema de bumps"""
@@ -298,7 +298,7 @@ class BumpTracker(commands.Cog):
 
             embed = discord.Embed(
                 description=(
-                    "🕒 **¡Es momento de hacer un bump!**\n"
+                    "🕐 **¡Es momento de hacer un bump!**\n"
                     "Utiliza **/bump** para apoyar al servidor.\n\n"
                     "*Sistema de recordatorio de bump*"
                 ),
@@ -310,40 +310,97 @@ class BumpTracker(commands.Cog):
         except Exception as e:
             print(f"[BUMP DEBUG] ❌ Error enviando recordatorio: {e}")
 
-    # ────────────────────────────────
+    # ────────────────────────────────────────
+    # Función auxiliar para obtener ranking
+    # ────────────────────────────────────────
+    async def get_bump_ranking(self, guild_id: int):
+        """Obtiene el ranking de bumps ordenado descendentemente"""
+        try:
+            bumps = await get_all_bumps(guild_id)
+            return bumps  # Ya viene ordenado de get_all_bumps
+        except Exception as e:
+            print(f"[BUMP DEBUG] ❌ Error obteniendo ranking: {e}")
+            return []
+
+    # ────────────────────────────────────────
     # Comando: ver estadísticas personales de bumps
-    # ────────────────────────────────
+    # ────────────────────────────────────────
     @commands.command(name="bumpstats")
     async def bump_stats(self, ctx: commands.Context):
-        """Muestra las estadísticas personales de bumps del usuario"""
+        """Muestra las estadísticas personales de bumps del usuario con su posición en el ranking"""
         try:
-            bumps = await get_bumps(ctx.author.id, ctx.guild.id)
+            # Obtener bumps del usuario
+            user_bumps = await get_bumps(ctx.author.id, ctx.guild.id)
+            
+            # Obtener ranking para calcular posición
+            ranking = await self.get_bump_ranking(ctx.guild.id)
+            
+            # Encontrar posición del usuario
+            user_position = None
+            total_users = len(ranking)
+            
+            for i, (user_id, bumps) in enumerate(ranking, 1):
+                if user_id == ctx.author.id:
+                    user_position = i
+                    break
+            
+            # Si no está en el ranking, está en última posición
+            if user_position is None:
+                user_position = total_users + 1 if user_bumps == 0 else total_users
             
             embed = discord.Embed(
                 title="📊 Tus estadísticas de Bump",
-                description=f"Has realizado **{bumps}** bumps en este servidor.",
                 color=EMBED_COLOR,
                 timestamp=datetime.now(timezone.utc)
             )
-            embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
             
-            # Agregar información adicional
             embed.add_field(
-                name="💡 Información",
-                value=f"• Usa `!clasificacion` para ver el ranking completo\n"
-                      f"• Usa `!help_bumps` para ver todos los comandos disponibles",
-                inline=False
+                name="🚀 Bumps realizados",
+                value=f"**{user_bumps}** bumps",
+                inline=True
             )
             
+            embed.add_field(
+                name="🏆 Posición en ranking",
+                value=f"**#{user_position}** de {total_users}",
+                inline=True
+            )
+            
+            # Calcular porcentaje si tiene bumps
+            if user_bumps > 0 and ranking:
+                total_bumps = sum(bumps for _, bumps in ranking)
+                percentage = (user_bumps / total_bumps) * 100 if total_bumps > 0 else 0
+                
+                embed.add_field(
+                    name="📈 Contribución",
+                    value=f"**{percentage:.1f}%** del total",
+                    inline=True
+                )
+            
+            embed.set_author(name=ctx.author.display_name, icon_url=ctx.author.display_avatar.url)
+            
+            # Mensaje motivacional basado en posición
+            if user_position == 1:
+                footer_msg = "🥇 ¡Eres el #1 en bumps!"
+            elif user_position <= 3:
+                footer_msg = f"🥈 ¡Estás en el top 3!"
+            elif user_position <= 10:
+                footer_msg = f"🔥 ¡Estás en el top 10!"
+            else:
+                footer_msg = "💪 ¡Sigue bumpeando para subir de posición!"
+            
+            embed.set_footer(text=footer_msg)
+            
             await ctx.send(embed=embed)
-            print(f"[BUMP DEBUG] Estadísticas mostradas para usuario {ctx.author.id}")
+            print(f"[BUMP DEBUG] Estadísticas mostradas para usuario {ctx.author.id} - Posición: {user_position}")
+            
         except Exception as e:
             print(f"[BUMP DEBUG] ❌ Error en bumpstats: {e}")
             await ctx.send("❌ Error obteniendo estadísticas. Intenta de nuevo.")
 
-    # ────────────────────────────────
+    # ────────────────────────────────────────
     # Comando: ranking completo de bumps
-    # ────────────────────────────────
+    # ────────────────────────────────────────
     @commands.command(name="clasificacion")
     async def clasificacion(self, ctx):
         """Muestra el ranking de usuarios por cantidad de bumps"""
@@ -381,11 +438,25 @@ class BumpTracker(commands.Cog):
             # Agregar posición del usuario actual si no está en el top 10
             user_bumps = await get_bumps(ctx.author.id, ctx.guild.id)
             if user_bumps > 0:
-                embed.add_field(
-                    name="📍 Tu posición",
-                    value=f"Tienes **{user_bumps}** bumps registrados",
-                    inline=False
-                )
+                # Encontrar posición del usuario
+                user_position = None
+                for i, (uid, _) in enumerate(bumps, 1):
+                    if uid == ctx.author.id:
+                        user_position = i
+                        break
+                
+                if user_position and user_position > 10:
+                    embed.add_field(
+                        name="📍 Tu posición",
+                        value=f"**#{user_position}** con **{user_bumps}** bumps",
+                        inline=False
+                    )
+                elif user_position and user_position <= 10:
+                    embed.add_field(
+                        name="📍 Tu posición",
+                        value=f"Apareces en el ranking arriba ⬆️",
+                        inline=False
+                    )
             
             await ctx.send(embed=embed)
             print(f"[BUMP DEBUG] Clasificación mostrada con {len(bumps)} usuarios")
@@ -399,9 +470,9 @@ class BumpTracker(commands.Cog):
         """Alias para el comando clasificacion"""
         await self.clasificacion(ctx)
 
-    # ────────────────────────────────
+    # ────────────────────────────────────────
     # Comando de debug
-    # ────────────────────────────────
+    # ────────────────────────────────────────
     @commands.command(name="debugbump")
     async def debug_bump(self, ctx: commands.Context):
         """Muestra información de debug del sistema de bumps (solo administradores)"""
@@ -454,7 +525,7 @@ class BumpTracker(commands.Cog):
             perms_status = "❌ Canal no encontrado"
         
         embed.add_field(
-            name="🔐 Permisos del Bot",
+            name="🔍 Permisos del Bot",
             value=perms_status,
             inline=False
         )
@@ -473,9 +544,9 @@ class BumpTracker(commands.Cog):
         
         await ctx.send(embed=embed)
 
-    # ────────────────────────────────
+    # ────────────────────────────────────────
     # Comando de test
-    # ────────────────────────────────
+    # ────────────────────────────────────────
     @commands.command(name="testbump", aliases=["tbump", "btest"])
     async def test_bump(self, ctx: commands.Context):
         """Comando de test para simular un bump (solo administradores)"""
@@ -557,7 +628,7 @@ class BumpTracker(commands.Cog):
             embed = discord.Embed(
                 description=(
                     "🧪 **¡Test de recordatorio!**\n"
-                    "🕒 Este sería el momento de hacer un bump real.\n"
+                    "🕐 Este sería el momento de hacer un bump real.\n"
                     "Utiliza **/bump** para apoyar al servidor.\n\n"
                     "*⚠️ Este es un recordatorio de prueba*"
                 ),
