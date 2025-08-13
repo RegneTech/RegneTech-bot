@@ -14,7 +14,7 @@ CATEGORIAS = {
                 "uso": "`!xp` o `!xp @usuario`"
             },
             {
-                "comando": "!top [página]",
+                "comando": "!top [cantidad]",
                 "descripcion": "Ranking global de usuarios por XP",
                 "uso": "`!top` o `!top 2`"
             },
