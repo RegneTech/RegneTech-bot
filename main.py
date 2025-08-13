@@ -34,7 +34,8 @@ MODULES = [
     "modules.invites.invites",
     "modules.tickets.tickets",
     "modules.beginning.beginning",
-    "modules.economia.sorteos"
+    "modules.economia.sorteos",
+    "modules.user.user"
 ]
 
 # Cargar módulos automáticamente (ASYNC)
