@@ -9,24 +9,24 @@ CATEGORIAS = {
         "color": 0x00ff00,
         "comandos": [
             {
-                "comando": "-xp [@usuario]",
+                "comando": "!xp [@usuario]",
                 "descripcion": "Ver tu experiencia actual o la de otro usuario",
-                "uso": "`-xp` o `-xp @usuario`"
+                "uso": "`!xp` o `!xp @usuario`"
             },
             {
-                "comando": "-top [página]",
+                "comando": "!top [página]",
                 "descripcion": "Ranking global de usuarios por XP",
-                "uso": "`-top` o `-top 2`"
+                "uso": "`!top` o `!top 2`"
             },
             {
-                "comando": "-top_semanal",
+                "comando": "!top_semanal",
                 "descripcion": "Top usuarios con más XP esta semana",
-                "uso": "`-top_semanal`"
+                "uso": "`!top_semanal`"
             },
             {
-                "comando": "-top_mensual",
+                "comando": "!top_mensual",
                 "descripcion": "Top usuarios con más XP este mes",
-                "uso": "`-top_mensual`"
+                "uso": "`!top_mensual`"
             }
         ]
     },
@@ -36,14 +36,14 @@ CATEGORIAS = {
         "color": 0xff6b35,
         "comandos": [
             {
-                "comando": "-bumpstats [@usuario]",
+                "comando": "!bumpstats [@usuario]",
                 "descripcion": "Ver estadísticas de bumps realizados",
-                "uso": "`-bumpstats` o `-bumpstats @usuario`"
+                "uso": "`!bumpstats` o `!bumpstats @usuario`"
             },
             {
-                "comando": "-clasificacion",
+                "comando": "!clasificacion",
                 "descripcion": "Ranking de usuarios por bumps realizados",
-                "uso": "`-clasificacion`"
+                "uso": "`!clasificacion`"
             }
         ]
     },
@@ -53,34 +53,34 @@ CATEGORIAS = {
         "color": 0xffd700,
         "comandos": [
             {
-                "comando": "-saldo [@usuario]",
+                "comando": "!saldo [@usuario]",
                 "descripcion": "Consultar tu balance o el de otro usuario",
-                "uso": "`-saldo` o `-saldo @usuario`"
+                "uso": "`!saldo` o `!saldo @usuario`"
             },
             {
-                "comando": "-inventario [@usuario]",
+                "comando": "!inventario [@usuario]",
                 "descripcion": "Ver los items que posees",
-                "uso": "`-inventario` o `-inventario @usuario`"
+                "uso": "`!inventario` o `!inventario @usuario`"
             },
             {
-                "comando": "-tienda [página]",
+                "comando": "!tienda [página]",
                 "descripcion": "Explorar la tienda de items disponibles",
-                "uso": "`-tienda` o `-tienda 2`"
+                "uso": "`!tienda` o `!tienda 2`"
             },
             {
-                "comando": "-comprar \"nombre\"",
+                "comando": "!comprar \"nombre\"",
                 "descripcion": "Comprar un item específico de la tienda",
-                "uso": "`-comprar \"Poción de Vida\"`"
+                "uso": "`!comprar \"Poción de Vida\"`"
             },
             {
-                "comando": "-use \"nombre\"",
+                "comando": "!use \"nombre\"",
                 "descripcion": "Usar un item de tu inventario",
-                "uso": "`-use \"Poción de Vida\"`"
+                "uso": "`!use \"Poción de Vida\"`"
             },
             {
-                "comando": "-transferir @usuario monto",
+                "comando": "!transferir @usuario monto",
                 "descripcion": "Transferir dinero a otro usuario",
-                "uso": "`-transferir @usuario 1000`"
+                "uso": "`!transferir @usuario 1000`"
             }
         ]
     },
@@ -90,29 +90,29 @@ CATEGORIAS = {
         "color": 0x9b59b6,
         "comandos": [
             {
-                "comando": "-user_invites [@usuario]",
+                "comando": "!user_invites [@usuario]",
                 "descripcion": "Ver invitaciones realizadas por un usuario",
-                "uso": "`-user_invites` o `-user_invites @usuario`"
+                "uso": "`!user_invites` o `!user_invites @usuario`"
             },
             {
-                "comando": "-who_invited [@usuario]",
+                "comando": "!who_invited [@usuario]",
                 "descripcion": "Ver quién invitó a un usuario al servidor",
-                "uso": "`-who_invited @usuario`"
+                "uso": "`!who_invited @usuario`"
             },
             {
-                "comando": "-invites_leaderboard",
+                "comando": "!invites_leaderboard",
                 "descripcion": "Ranking completo de invitaciones",
-                "uso": "`-invites_leaderboard`"
+                "uso": "`!invites_leaderboard`"
             },
             {
-                "comando": "-my_rank",
+                "comando": "!my_rank",
                 "descripcion": "Tu posición en el ranking de invitaciones",
-                "uso": "`-my_rank`"
+                "uso": "`!my_rank`"
             },
             {
-                "comando": "-top_invites [cantidad]",
+                "comando": "!top_invites [cantidad]",
                 "descripcion": "Top usuarios con más invitaciones",
-                "uso": "`-top_invites` o `-top_invites 15`"
+                "uso": "`!top_invites` o `!top_invites 15`"
             }
         ]
     }
@@ -196,7 +196,7 @@ class ComandoDetalleView(discord.ui.View):
     def crear_embed_categoria(self):
         comandos_lista = []
         for i, cmd in enumerate(self.categoria_data["comandos"], 1):
-            comandos_lista.append(f"`{i}.` **{cmd['comando']}**\n   └ {cmd['descripcion']}")
+            comandos_lista.append(f"`{i}.` **{cmd['comando']}**\n   └─ {cmd['descripcion']}")
         
         embed = discord.Embed(
             title=f"{self.categoria_data['emoji']} {self.categoria_nombre}",
@@ -257,7 +257,7 @@ class CategoriaSelect(discord.ui.Select):
             )
         
         super().__init__(
-            placeholder="🔍 Explora las categorías de comandos...",
+            placeholder="📁 Explora las categorías de comandos...",
             min_values=1,
             max_values=1,
             options=options
@@ -271,7 +271,7 @@ class CategoriaSelect(discord.ui.Select):
             # Crear lista de comandos con numeración
             comandos_lista = []
             for i, cmd in enumerate(categoria_data["comandos"], 1):
-                comandos_lista.append(f"`{i}.` **{cmd['comando']}**\n   └ {cmd['descripcion']}")
+                comandos_lista.append(f"`{i}.` **{cmd['comando']}**\n   └─ {cmd['descripcion']}")
             
             embed = discord.Embed(
                 title=f"{categoria_data['emoji']} {categoria_nombre}",
@@ -295,15 +295,15 @@ class CategoriaView(discord.ui.View):
         embed = discord.Embed(
             title="📚 Guía de Uso de Comandos",
             description=(
-                "**🔤 Sintaxis de Comandos:**\n"
+                "**📤 Sintaxis de Comandos:**\n"
                 "• `[]` = Parámetro opcional\n"
                 "• `\"\"` = Parámetro obligatorio (texto)\n"
                 "• `@usuario` = Mencionar a un usuario\n\n"
                 "**💡 Ejemplos:**\n"
-                "• `-xp` - Ver tu XP\n"
-                "• `-xp @Juan` - Ver XP de Juan\n"
-                "• `-comprar \"Poción\"` - Comprar item\n"
-                "• `-transferir @María 500` - Transferir dinero\n\n"
+                "• `!xp` - Ver tu XP\n"
+                "• `!xp @Juan` - Ver XP de Juan\n"
+                "• `!comprar \"Poción\"` - Comprar item\n"
+                "• `!transferir @María 500` - Transferir dinero\n\n"
                 "**❓ ¿Necesitas ayuda?**\n"
                 "Pregunta a los moderadores del servidor."
             ),
@@ -344,7 +344,7 @@ class User(commands.Cog):
     async def menu_comandos(self, ctx):
         """Comando mejorado para mostrar el menú de comandos interactivo"""
         
-        print(f"🔍 Comando menu ejecutado por {ctx.author} en {ctx.guild}")
+        print(f"📄 Comando menu ejecutado por {ctx.author} en {ctx.guild}")
         
         try:
             embed = discord.Embed(
