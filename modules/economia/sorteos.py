@@ -4,12 +4,14 @@ import asyncio
 import random
 from database import update_user_balance, get_user_balance, add_transaction
 from decimal import Decimal
+from datetime import datetime
 
 class Sorteos(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.sorteo_activo = False
         self.canal_sorteo_id = 1404487864204656730
+        self.canal_logs_id = 1400106793811705863  # Canal de logs permanentes
         self.rol_participante_id = 1400106792196898890
         self.participantes_requeridos = 10
         
@@ -62,6 +64,37 @@ class Sorteos(commands.Cog):
         embed.set_footer(text="¡Gracias por participar!")
         return embed
 
+    def crear_embed_log_ganador(self, ganador, participantes_count):
+        """Crea el embed de log para el canal permanente"""
+        ahora = datetime.now()
+        embed = discord.Embed(
+            title="🏆 GANADOR DEL SORTEO",
+            color=0xffd700
+        )
+        embed.add_field(
+            name="👤 Ganador",
+            value=f"{ganador.mention} (`{ganador.name}#{ganador.discriminator}`)\nID: `{ganador.id}`",
+            inline=False
+        )
+        embed.add_field(
+            name="💰 Premio",
+            value="€1.00",
+            inline=True
+        )
+        embed.add_field(
+            name="👥 Participantes",
+            value=f"{participantes_count}",
+            inline=True
+        )
+        embed.add_field(
+            name="📅 Fecha y Hora",
+            value=f"{ahora.strftime('%d/%m/%Y - %H:%M:%S')}",
+            inline=True
+        )
+        embed.set_thumbnail(url=ganador.display_avatar.url)
+        embed.set_footer(text=f"Sorteo ID: {ahora.strftime('%Y%m%d_%H%M%S')}")
+        return embed
+
     async def contar_participantes(self, guild):
         """Cuenta los miembros que tienen el rol de participante"""
         rol = guild.get_role(self.rol_participante_id)
@@ -103,6 +136,21 @@ class Sorteos(commands.Cog):
                 
         except Exception as e:
             print(f"Error actualizando embed: {e}")
+    
+    async def enviar_log_ganador(self, ganador, participantes_count):
+        """Envía el log del ganador al canal de logs permanentes"""
+        try:
+            canal_logs = self.bot.get_channel(self.canal_logs_id)
+            if not canal_logs:
+                print(f"❌ No se encontró el canal de logs con ID: {self.canal_logs_id}")
+                return
+            
+            embed_log = self.crear_embed_log_ganador(ganador, participantes_count)
+            await canal_logs.send(embed=embed_log)
+            print(f"✅ Log enviado al canal {canal_logs.name} - Ganador: {ganador.name}")
+            
+        except Exception as e:
+            print(f"❌ Error enviando log: {e}")
     
     async def iniciar_sorteo(self, canal, participantes):
         """Inicia el proceso del sorteo"""
@@ -148,6 +196,9 @@ class Sorteos(commands.Cog):
                 1.00, 
                 'Ganador del sorteo - €1.00'
             )
+            
+            # ✅ ENVIAR LOG AL CANAL PERMANENTE
+            await self.enviar_log_ganador(ganador, len(participantes))
             
             # Quitar rol a todos los participantes
             for participante in participantes:
@@ -231,6 +282,7 @@ class Sorteos(commands.Cog):
     async def sorteo_info(self, ctx):
         """Muestra información del sistema de sorteos"""
         canal = self.bot.get_channel(self.canal_sorteo_id)
+        canal_logs = self.bot.get_channel(self.canal_logs_id)
         rol = ctx.guild.get_role(self.rol_participante_id)
         participantes = await self.contar_participantes(ctx.guild)
         
@@ -241,6 +293,11 @@ class Sorteos(commands.Cog):
         embed.add_field(
             name="📍 Canal de Sorteos", 
             value=canal.mention if canal else "❌ No encontrado",
+            inline=False
+        )
+        embed.add_field(
+            name="📋 Canal de Logs", 
+            value=canal_logs.mention if canal_logs else "❌ No encontrado",
             inline=False
         )
         embed.add_field(
@@ -282,6 +339,14 @@ class Sorteos(commands.Cog):
             
         await ctx.send("🚀 Forzando inicio del sorteo...")
         await self.iniciar_sorteo(ctx.channel, participantes)
+
+    @commands.command(name="test_log")
+    @commands.has_permissions(administrator=True)
+    async def test_log(self, ctx):
+        """Prueba el sistema de logs con el usuario que ejecuta el comando"""
+        await ctx.send("🧪 Probando sistema de logs...")
+        await self.enviar_log_ganador(ctx.author, 10)
+        await ctx.send("✅ Log de prueba enviado!")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Sorteos(bot))
