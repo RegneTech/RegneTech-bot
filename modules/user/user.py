@@ -4,29 +4,29 @@ from discord.ext import commands
 # Diccionario con categorías y sus comandos
 CATEGORIAS = {
     "Niveles": [
-        ":xp",
-        ":top",
-        ":top_semanal",
-        ":top_mensual"
+        "-xp",
+        "-top",
+        "-top_semanal",
+        "-top_mensual"
     ],
     "Bumps": [
-        ":bumpstats",
-        ":clasificacion"
+        "-bumpstats",
+        "-clasificacion"
     ],
     "Economía": [
-        ":saldo",
-        ":inventario",
-        ":tienda",
-        ':comprar "nombre"',
-        ':use "nombre"',
-        ":transferir @usuario monto"
+        "-saldo",
+        "-inventario",
+        "-tienda",
+        '-comprar "nombre"',
+        '-use "nombre"',
+        "-transferir @usuario monto"
     ],
     "Invitaciones": [
-        ":user_invites [usuario]",
-        ":who_invited [usuario]",
-        ":invites_leaderboard",
-        ":my_rank",
-        ":top_invites"
+        "-user_invites [usuario]",
+        "-who_invited [usuario]",
+        "-invites_leaderboard",
+        "-my_rank",
+        "-top_invites"
     ]
 }
 
