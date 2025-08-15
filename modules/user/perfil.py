@@ -51,6 +51,13 @@ class Perfil(commands.Cog):
         
         return level, current_level_xp, next_level_xp
     
+    def get_user_rank_role(self, member):
+        """Obtiene el rol de rango del usuario (que empiece con ◈ Rango)"""
+        for role in member.roles:
+            if role.name.startswith("◈ Rango"):
+                return role.name
+        return "Sin Rango"
+    
     async def get_user_avatar(self, user):
         """Descarga el avatar del usuario"""
         try:
@@ -185,6 +192,9 @@ class Perfil(commands.Cog):
             user_data['xp'], guild_config['level_formula']
         )
         
+        # Obtener rol de rango del usuario
+        user_rank_role = self.get_user_rank_role(user)
+        
         # Descargar y procesar avatar
         avatar = await self.get_user_avatar(user)
         
@@ -215,6 +225,7 @@ class Perfil(commands.Cog):
         font_large = self.get_font(40, bold=True)   # Para nivel
         font_medium = self.get_font(60, bold=True)  # Para textos importantes
         font_small = self.get_font(20)              # Para detalles
+        font_role = self.get_font(32, bold=True)    # Para el rol de rango
         
         # === INFORMACIÓN DEL USUARIO (DEBAJO DEL AVATAR) ===
         
@@ -237,8 +248,20 @@ class Perfil(commands.Cog):
         bbox = draw.textbbox((0, 0), level_text, font=font_large)
         text_width = bbox[2] - bbox[0]
         level_x = (width - text_width) -93
+        level_y = info_y + 112
 
-        draw.text((level_x, info_y + 112), level_text, font=font_large, fill=cyan_bright)
+        draw.text((level_x, level_y), level_text, font=font_large, fill=cyan_bright)
+        
+        # Rol de rango a la misma altura del nivel pero 100px más a la izquierda
+        role_x = level_x - 100
+        role_y = level_y
+        
+        # Acortar el texto del rol si es muy largo
+        role_text = user_rank_role
+        if len(role_text) > 12:
+            role_text = role_text[:9] + "..."
+        
+        draw.text((role_x, role_y), role_text, font=font_role, fill=cyan_dark)
         
         # === UNA SOLA BARRA DE PROGRESO ===
         
@@ -299,7 +322,7 @@ class Perfil(commands.Cog):
         
         if member.bot:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⚠ Error",
                 description="No puedo mostrar el perfil de un bot.",
                 color=0xff0000
             )
@@ -311,7 +334,7 @@ class Perfil(commands.Cog):
             user_data = await get_user_level_data(member.id, ctx.guild.id)
             if not user_data:
                 embed = discord.Embed(
-                    title="❌ Usuario no encontrado",
+                    title="⚠ Usuario no encontrado",
                     description=f"{member.mention} no tiene datos registrados en el sistema de niveles.",
                     color=0xff0000
                 )
@@ -347,7 +370,7 @@ class Perfil(commands.Cog):
             print(f"Error en comando perfil: {e}")
             
             embed = discord.Embed(
-                title="❌ Error",
+                title="⚠ Error",
                 description="Ocurrió un error al generar el perfil. Inténtalo de nuevo más tarde.",
                 color=0xff0000
             )
