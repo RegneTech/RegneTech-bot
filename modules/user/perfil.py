@@ -147,7 +147,7 @@ class Perfil(commands.Cog):
         # Crear imagen base
         try:
             # Intentar cargar fondo personalizado
-            background = Image.open(f"{self.bg_path}profile_bg.png").resize((width, height))
+            background = Image.open(f"{self.bg_path}perfil.png").resize((width, height))
         except:
             # Fondo degradado por defecto
             background = Image.new('RGB', (width, height), (47, 49, 54))
