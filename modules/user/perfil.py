@@ -270,13 +270,13 @@ class Perfil(commands.Cog):
         
         # === DINERO Y RANK ===
         
-        money_y = progress_y + bar_height + 360
+        money_y = progress_y + bar_height + 370
         
         # Dinero
         money_text = f"{balance:.2f}"
         bbox = draw.textbbox((0, 0), money_text, font=font_medium)
         text_width = bbox[2] - bbox[0]
-        money_x = (width - text_width) // 2
+        money_x = (width - text_width) - 200
         draw.text((money_x, money_y), money_text, font=font_medium, fill=cyan_bright)
         
         # Rank en formato #2
