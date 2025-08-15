@@ -247,9 +247,9 @@ class Perfil(commands.Cog):
         # Barra de progreso de XP
         progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
         
-        bar_width = width - 130
+        bar_width = width - 120
         bar_height = 45
-        bar_x = 52
+        bar_x = 54
         
         self.draw_progress_bar(
             draw, bar_x, progress_y, bar_width, bar_height, progress,
