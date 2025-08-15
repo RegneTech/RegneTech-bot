@@ -213,7 +213,7 @@ class Perfil(commands.Cog):
         # Fuentes más grandes para la resolución 820x950
         font_huge = self.get_font(54, bold=True)    # Para el nombre
         font_large = self.get_font(40, bold=True)   # Para nivel
-        font_medium = self.get_font(26, bold=True)  # Para textos importantes
+        font_medium = self.get_font(60, bold=True)  # Para textos importantes
         font_small = self.get_font(20)              # Para detalles
         
         # === INFORMACIÓN DEL USUARIO (DEBAJO DEL AVATAR) ===
@@ -270,10 +270,10 @@ class Perfil(commands.Cog):
         
         # === DINERO Y RANK ===
         
-        money_y = progress_y + bar_height + 80
+        money_y = progress_y + bar_height + 400
         
-        # Símbolo € y dinero
-        money_text = f"€ {balance:.2f}"
+        # Dinero
+        money_text = f"{balance:.2f}"
         bbox = draw.textbbox((0, 0), money_text, font=font_medium)
         text_width = bbox[2] - bbox[0]
         money_x = (width - text_width) // 2
