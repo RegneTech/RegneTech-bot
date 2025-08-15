@@ -198,8 +198,8 @@ class Perfil(commands.Cog):
         # Avatar en la parte superior centrado - más grande para la resolución
         avatar_size = 220
         avatar_circular = self.create_circle_avatar(avatar, avatar_size)
-        avatar_x = (width - avatar_size) - 540 
-        avatar_y = 60
+        avatar_x = (width - avatar_size) - 545 
+        avatar_y = 50
         
         # Borde cyan alrededor del avatar
         draw.ellipse(
