@@ -55,7 +55,7 @@ class Perfil(commands.Cog):
         """Obtiene el rol de rango del usuario (que empiece con ◈ Rango)"""
         for role in member.roles:
             if role.name.startswith("◈ Rango"):
-                return role.name
+                return role.name.replace("◈ ", "")
         return "Sin Rango"
     
     async def get_user_avatar(self, user):
