@@ -283,8 +283,8 @@ class Perfil(commands.Cog):
         rank_text = f"#{rank}"
         bbox = draw.textbbox((0, 0), rank_text, font=font_medium)
         text_width = bbox[2] - bbox[0]
-        rank_x = (width - text_width) -130
-        rank_y = money_y + 33
+        rank_x = (width - text_width) -150
+        rank_y = money_y + 35
         draw.text((rank_x, rank_y), rank_text, font=font_medium, fill=cyan_bright)
         
         return background
