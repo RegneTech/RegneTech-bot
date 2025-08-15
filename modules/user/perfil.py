@@ -212,7 +212,7 @@ class Perfil(commands.Cog):
         
         # Fuentes más grandes para la resolución 820x950
         font_huge = self.get_font(54, bold=True)    # Para el nombre
-        font_large = self.get_font(32, bold=True)   # Para nivel
+        font_large = self.get_font(40, bold=True)   # Para nivel
         font_medium = self.get_font(26, bold=True)  # Para textos importantes
         font_small = self.get_font(20)              # Para detalles
         
@@ -228,7 +228,7 @@ class Perfil(commands.Cog):
         # Calcular posición centrada para el texto
         bbox = draw.textbbox((0, 0), username, font=font_huge)
         text_width = bbox[2] - bbox[0]
-        username_x = (width - text_width) + -180
+        username_x = (width - text_width) + -190
 
         draw.text((username_x, info_y + 10), username, font=font_huge, fill=cyan_bright)
         
@@ -238,7 +238,7 @@ class Perfil(commands.Cog):
         text_width = bbox[2] - bbox[0]
         level_x = (width - text_width) -100
 
-        draw.text((level_x, info_y + 100), level_text, font=font_large, fill=cyan_bright)
+        draw.text((level_x, info_y + 120), level_text, font=font_large, fill=cyan_bright)
         
         # === UNA SOLA BARRA DE PROGRESO ===
         
