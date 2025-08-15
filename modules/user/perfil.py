@@ -16,7 +16,7 @@ class Perfil(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.font_path = "resources\fonts"  # Carpeta donde están las fuentes
-        self.bg_path = "resources\images\perfil\perfil.png"  # Carpeta donde están los fondos
+        self.bg_path = "resources\images\perfil"  # Carpeta donde están los fondos
     
     def calculate_level_xp(self, level: int, formula: str = 'exponential') -> int:
         """Calcula la XP necesaria para un nivel específico"""
