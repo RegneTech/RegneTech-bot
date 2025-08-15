@@ -160,8 +160,8 @@ class Perfil(commands.Cog):
     async def create_profile_image(self, user, user_data: dict, guild_config: dict, 
                                  balance: float, rank: int):
         """Crea la imagen del perfil con el diseño exacto de la imagen"""
-        # Dimensiones de la imagen (más grande para mejor calidad)
-        width, height = 900, 500
+        # Dimensiones 3:4 como solicitado
+        width, height = 600, 800
         
         # Crear imagen base con fondo azul oscuro como en la imagen
         try:
@@ -192,10 +192,11 @@ class Perfil(commands.Cog):
         avatar_size = 140
         avatar_circular = self.create_circle_avatar(avatar, avatar_size)
         
-        # === LAYOUT COMO EN LA IMAGEN ===
+        # === LAYOUT ADAPTADO PARA FORMATO 3:4 ===
         
-        # Avatar en la esquina superior izquierda con borde cyan
-        avatar_x, avatar_y = 60, 50
+        # Avatar en la parte superior centrado
+        avatar_x = (width - avatar_size) // 2
+        avatar_y = 40
         
         # Borde cyan alrededor del avatar
         draw.ellipse(
@@ -212,66 +213,86 @@ class Perfil(commands.Cog):
         font_medium = self.get_font(22, bold=True)  # Para textos importantes
         font_small = self.get_font(18)              # Para detalles
         
-        # === INFORMACIÓN DEL USUARIO (DERECHA DEL AVATAR) ===
+        # === INFORMACIÓN DEL USUARIO (DEBAJO DEL AVATAR) ===
         
-        info_x = avatar_x + avatar_size + 40
+        info_y = avatar_y + avatar_size + 30
         
-        # Nombre del usuario (más grande)
+        # Nombre del usuario centrado
         username = user.display_name
         if len(username) > 15:
             username = username[:12] + "..."
         
-        draw.text((info_x, avatar_y + 20), username, font=font_huge, fill=white_text)
+        # Calcular posición centrada para el texto
+        bbox = draw.textbbox((0, 0), username, font=font_huge)
+        text_width = bbox[2] - bbox[0]
+        username_x = (width - text_width) // 2
         
-        # Nivel (con estilo cyan)
+        draw.text((username_x, info_y), username, font=font_huge, fill=white_text)
+        
+        # Nivel centrado
         level_text = f"NIVEL {level}"
-        draw.text((info_x, avatar_y + 80), level_text, font=font_large, fill=cyan_bright)
+        bbox = draw.textbbox((0, 0), level_text, font=font_large)
+        text_width = bbox[2] - bbox[0]
+        level_x = (width - text_width) // 2
         
-        # === BARRAS DE PROGRESO COMO EN LA IMAGEN ===
+        draw.text((level_x, info_y + 60), level_text, font=font_large, fill=cyan_bright)
         
-        progress_y = avatar_y + avatar_size + 40
+        # === BARRAS DE PROGRESO CENTRADAS ===
         
-        # Primera barra de progreso (XP) - más larga
+        progress_y = info_y + 140
+        
+        # Primera barra de progreso (XP) - adaptada al ancho
         progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
         
-        bar_width = 600
-        bar_height = 25
+        bar_width = width - 80  # Margen de 40px a cada lado
+        bar_height = 30
+        bar_x = 40
         
         self.draw_progress_bar(
-            draw, 60, progress_y, bar_width, bar_height, progress,
+            draw, bar_x, progress_y, bar_width, bar_height, progress,
             bg_color=darker_blue,
             fill_color=cyan_bright,
             radius=15
         )
         
-        # Texto de XP sobre la barra
+        # Texto de XP centrado sobre la barra
         xp_text = f"XP: {current_xp:,} / {next_level_xp:,}"
-        draw.text((60, progress_y - 30), xp_text, font=font_small, fill=white_text)
+        bbox = draw.textbbox((0, 0), xp_text, font=font_small)
+        text_width = bbox[2] - bbox[0]
+        xp_x = (width - text_width) // 2
+        draw.text((xp_x, progress_y - 30), xp_text, font=font_small, fill=white_text)
         
         # Segunda barra (ejemplo: progreso semanal)
-        weekly_progress = min(user_data['weekly_xp'] / 1000, 1.0)  # Ejemplo
+        weekly_progress = min(user_data['weekly_xp'] / 1000, 1.0)
         
         self.draw_progress_bar(
-            draw, 60, progress_y + 60, bar_width, bar_height, weekly_progress,
+            draw, bar_x, progress_y + 80, bar_width, bar_height, weekly_progress,
             bg_color=darker_blue,
             fill_color=cyan_bright,
             radius=15
         )
         
-        # Texto sobre la segunda barra
-        draw.text((60, progress_y + 30), f"XP Semanal: {user_data['weekly_xp']:,}", 
-                 font=font_small, fill=white_text)
+        # Texto centrado sobre la segunda barra
+        weekly_text = f"XP Semanal: {user_data['weekly_xp']:,}"
+        bbox = draw.textbbox((0, 0), weekly_text, font=font_small)
+        text_width = bbox[2] - bbox[0]
+        weekly_x = (width - text_width) // 2
+        draw.text((weekly_x, progress_y + 50), weekly_text, font=font_small, fill=white_text)
         
-        # === CAJAS DE TROFEOS (PARTE INFERIOR) ===
+        # === CAJAS DE TROFEOS CENTRADAS ===
         
-        trophies_y = progress_y + 120
+        trophies_y = progress_y + 160
         trophy_width = 120
         trophy_height = 80
-        trophy_spacing = 150
         
-        # Tres cajas de trofeos como en la imagen
+        # Calcular espaciado para centrar las 3 cajas
+        total_trophies_width = 3 * trophy_width
+        available_space = width - total_trophies_width
+        trophy_spacing = available_space // 4  # Espacios: inicio, entre1, entre2, final
+        
+        # Tres cajas de trofeos centradas
         for i in range(3):
-            trophy_x = 60 + (i * trophy_spacing)
+            trophy_x = trophy_spacing + (i * (trophy_width + trophy_spacing))
             
             self.draw_trophy_box(
                 draw, trophy_x, trophies_y, trophy_width, trophy_height,
@@ -280,47 +301,52 @@ class Perfil(commands.Cog):
                 radius=15
             )
         
-        # === PANEL DE DINERO (IZQUIERDA INFERIOR) ===
+        # === PANELES INFERIORES APILADOS VERTICALMENTE ===
         
-        money_panel_y = trophies_y + 100
-        money_width = 350
-        money_height = 60
+        panels_y = trophies_y + 120
+        panel_width = width - 80  # Margen de 40px a cada lado
+        panel_height = 60
+        panel_x = 40
         
-        # Panel de dinero con borde cyan
+        # Panel de dinero
         draw.rounded_rectangle(
-            [(60, money_panel_y), (60 + money_width, money_panel_y + money_height)],
+            [(panel_x, panels_y), (panel_x + panel_width, panels_y + panel_height)],
             radius=15,
             fill=darker_blue,
             outline=cyan_bright,
             width=3
         )
         
-        # Símbolo de euro y cantidad
-        draw.text((80, money_panel_y + 15), f"€ {balance:,.2f}", 
-                 font=font_medium, fill=cyan_bright)
+        # Símbolo de euro y cantidad centrado
+        money_text = f"€ {balance:,.2f}"
+        bbox = draw.textbbox((0, 0), money_text, font=font_medium)
+        text_width = bbox[2] - bbox[0]
+        money_x = (width - text_width) // 2
+        draw.text((money_x, panels_y + 15), money_text, font=font_medium, fill=cyan_bright)
         
-        # === PANEL DE RANK (DERECHA INFERIOR) ===
+        # Panel de rank (debajo del de dinero)
+        rank_y = panels_y + panel_height + 20
         
-        rank_x = 60 + money_width + 30
-        rank_width = 200
-        
-        # Panel de rank
         draw.rounded_rectangle(
-            [(rank_x, money_panel_y), (rank_x + rank_width, money_panel_y + money_height)],
+            [(panel_x, rank_y), (panel_x + panel_width, rank_y + panel_height)],
             radius=15,
             fill=darker_blue,
             outline=cyan_bright,
             width=3
         )
         
-        # Texto RANK
-        draw.text((rank_x + 20, money_panel_y + 15), f"RANK #{rank}", 
-                 font=font_medium, fill=cyan_bright)
+        # Texto RANK centrado
+        rank_text = f"RANK #{rank}"
+        bbox = draw.textbbox((0, 0), rank_text, font=font_medium)
+        text_width = bbox[2] - bbox[0]
+        rank_x = (width - text_width) // 2
+        draw.text((rank_x, rank_y + 15), rank_text, font=font_medium, fill=cyan_bright)
         
         # === DETALLES ADICIONALES ===
         
-        # Líneas decorativas
-        draw.line([(60, progress_y - 10), (width - 60, progress_y - 10)], 
+        # Líneas decorativas centradas
+        line_margin = 60
+        draw.line([(line_margin, progress_y - 10), (width - line_margin, progress_y - 10)], 
                  fill=cyan_dark, width=2)
         
         return background
@@ -376,19 +402,8 @@ class Perfil(commands.Cog):
             # Crear archivo de Discord
             file = discord.File(img_buffer, filename=f"perfil_{member.id}.png")
             
-            # Crear embed básico
-            embed = discord.Embed(
-                title=f"📊 Perfil de {member.display_name}",
-                color=0x00FFFF  # Color cyan
-            )
-            
-            embed.set_image(url=f"attachment://perfil_{member.id}.png")
-            embed.set_footer(
-                text=f"Solicitado por {ctx.author.display_name}",
-                icon_url=ctx.author.display_avatar.url
-            )
-            
-            await ctx.send(embed=embed, file=file)
+            # Enviar solo la imagen, sin embed
+            await ctx.send(file=file)
             
         except Exception as e:
             print(f"Error en comando perfil: {e}")
