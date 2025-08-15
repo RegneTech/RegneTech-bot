@@ -15,8 +15,8 @@ import math
 class Perfil(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.font_path = "resources/fonts"  # Cambio: usar / en lugar de \
-        self.bg_path = "resources/images/perfil"  # Cambio: usar / en lugar de \
+        self.font_path = "resources/fonts" 
+        self.bg_path = "resources/images/perfil" 
     
     def calculate_level_xp(self, level: int, formula: str = 'exponential') -> int:
         """Calcula la XP necesaria para un nivel específico"""
@@ -198,14 +198,14 @@ class Perfil(commands.Cog):
         # Avatar en la parte superior centrado - más grande para la resolución
         avatar_size = 160
         avatar_circular = self.create_circle_avatar(avatar, avatar_size)
-        avatar_x = (width - avatar_size) // 2
+        avatar_x = (width - avatar_size) - 20 
         avatar_y = 60
         
         # Borde cyan alrededor del avatar
         draw.ellipse(
             [(avatar_x - 5, avatar_y - 5), (avatar_x + avatar_size + 5, avatar_y + avatar_size + 5)],
             outline=cyan_bright,
-            width=4
+            width=0
         )
         
         background.paste(avatar_circular, (avatar_x, avatar_y), avatar_circular)
