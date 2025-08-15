@@ -230,7 +230,7 @@ class Perfil(commands.Cog):
         text_width = bbox[2] - bbox[0]
         username_x = (width - text_width) + -200
 
-        draw.text((username_x, info_y + 20), username, font=font_huge, fill=white_text)
+        draw.text((username_x, info_y + 20), username, font=font_huge, fill=cyan_bright)
         
         # Nivel centrado
         level_text = f"{level}"
