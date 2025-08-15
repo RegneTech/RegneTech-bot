@@ -254,7 +254,7 @@ class Perfil(commands.Cog):
         
         # Rol de rango a la misma altura del nivel pero 295px más a la izquierda
         role_x = level_x - 295
-        role_y = level_y - 5
+        role_y = level_y - 2
         
         # Acortar el texto del rol si es muy largo
         role_text = user_rank_role
