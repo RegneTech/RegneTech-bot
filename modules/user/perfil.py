@@ -221,7 +221,7 @@ class Perfil(commands.Cog):
         info_y = avatar_y + avatar_size + 40
         
         # Nombre del usuario centrado
-        username = user.display_name
+        username = user.name
         if len(username) > 15:
             username = username[:12] + "..."
         
