@@ -228,9 +228,9 @@ class Perfil(commands.Cog):
         # Calcular posición centrada para el texto
         bbox = draw.textbbox((0, 0), username, font=font_huge)
         text_width = bbox[2] - bbox[0]
-        username_x = (width - text_width) + -200
+        username_x = (width - text_width) + -180
 
-        draw.text((username_x, info_y + 20), username, font=font_huge, fill=cyan_bright)
+        draw.text((username_x, info_y + 10), username, font=font_huge, fill=cyan_bright)
         
         # Nivel centrado
         level_text = f"{level}"
