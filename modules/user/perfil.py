@@ -211,7 +211,7 @@ class Perfil(commands.Cog):
         background.paste(avatar_circular, (avatar_x, avatar_y), avatar_circular)
         
         # Fuentes más grandes para la resolución 820x950
-        font_huge = self.get_font(60, bold=True)    # Para el nombre
+        font_huge = self.get_font(54, bold=True)    # Para el nombre
         font_large = self.get_font(32, bold=True)   # Para nivel
         font_medium = self.get_font(26, bold=True)  # Para textos importantes
         font_small = self.get_font(20)              # Para detalles
