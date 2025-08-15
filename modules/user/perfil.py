@@ -257,9 +257,9 @@ class Perfil(commands.Cog):
         
         return background
     
-    @commands.command(name="perfill", aliases=["profileee", "p"])
+    @commands.command(name="perfillll", aliases=["profileee", "p"])
     @commands.cooldown(1, 30, commands.BucketType.user)  # Cooldown de 30 segundos
-    async def perfill(self, ctx, member: discord.Member = None):
+    async def perfillll(self, ctx, member: discord.Member = None):
         """Muestra el perfil de un usuario con imagen personalizada"""
         
         # Si no se especifica miembro, usar el autor del comando
@@ -334,7 +334,7 @@ class Perfil(commands.Cog):
             )
             await ctx.send(embed=embed)
     
-    @perfill.error
+    @perfillll.error
     async def perfil_error(self, ctx, error):
         """Maneja errores del comando perfil"""
         if isinstance(error, commands.CommandOnCooldown):
