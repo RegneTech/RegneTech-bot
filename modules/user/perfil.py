@@ -252,8 +252,8 @@ class Perfil(commands.Cog):
 
         draw.text((level_x, level_y), level_text, font=font_role, fill=cyan_bright)
         
-        # Rol de rango a la misma altura del nivel pero 280px más a la izquierda
-        role_x = level_x - 280
+        # Rol de rango a la misma altura del nivel pero 295px más a la izquierda
+        role_x = level_x - 295
         role_y = level_y
         
         # Acortar el texto del rol si es muy largo
