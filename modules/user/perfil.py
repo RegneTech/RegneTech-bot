@@ -242,12 +242,12 @@ class Perfil(commands.Cog):
         
         # === UNA SOLA BARRA DE PROGRESO ===
         
-        progress_y = info_y + 250
+        progress_y = info_y + 240
         
         # Barra de progreso de XP
         progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
         
-        bar_width = width - 125
+        bar_width = width - 130
         bar_height = 45
         bar_x = 52
         
