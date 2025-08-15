@@ -254,14 +254,14 @@ class Perfil(commands.Cog):
         
         # Rol de rango a la misma altura del nivel pero 295px más a la izquierda
         role_x = level_x - 295
-        role_y = level_y
+        role_y = level_y - 5
         
         # Acortar el texto del rol si es muy largo
         role_text = user_rank_role
         if len(role_text) > 12:
             role_text = role_text[:9] + "..."
         
-        draw.text((role_x, role_y), role_text, font=font_role, fill=cyan_dark)
+        draw.text((role_x, role_y), role_text, font=font_role, fill=cyan_bright)
         
         # === UNA SOLA BARRA DE PROGRESO ===
         
