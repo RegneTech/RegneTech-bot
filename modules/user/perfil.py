@@ -218,7 +218,7 @@ class Perfil(commands.Cog):
         
         # === INFORMACIÓN DEL USUARIO (DEBAJO DEL AVATAR) ===
         
-        info_y = avatar_y + avatar_size + 40
+        info_y = avatar_y + 40
         
         # Nombre del usuario centrado
         username = user.name
@@ -228,7 +228,7 @@ class Perfil(commands.Cog):
         # Calcular posición centrada para el texto
         bbox = draw.textbbox((0, 0), username, font=font_huge)
         text_width = bbox[2] - bbox[0]
-        username_x = (width - text_width) + -220
+        username_x = (width - text_width) + -200
 
         draw.text((username_x, info_y), username, font=font_huge, fill=white_text)
         
