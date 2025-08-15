@@ -225,7 +225,7 @@ class Perfil(commands.Cog):
         font_large = self.get_font(40, bold=True)   # Para nivel
         font_medium = self.get_font(60, bold=True)  # Para textos importantes
         font_small = self.get_font(20)              # Para detalles
-        font_role = self.get_font(32, bold=True)    # Para el rol de rango
+        font_role = self.get_font(45, bold=True)    # Para el rol de rango
         
         # === INFORMACIÓN DEL USUARIO (DEBAJO DEL AVATAR) ===
         
@@ -245,15 +245,15 @@ class Perfil(commands.Cog):
         
         # Nivel centrado
         level_text = f"{level}"
-        bbox = draw.textbbox((0, 0), level_text, font=font_large)
+        bbox = draw.textbbox((0, 0), level_text, font=font_role)
         text_width = bbox[2] - bbox[0]
         level_x = (width - text_width) -93
         level_y = info_y + 112
 
-        draw.text((level_x, level_y), level_text, font=font_large, fill=cyan_bright)
+        draw.text((level_x, level_y), level_text, font=font_role, fill=cyan_bright)
         
         # Rol de rango a la misma altura del nivel pero 100px más a la izquierda
-        role_x = level_x - 100
+        role_x = level_x - 300
         role_y = level_y
         
         # Acortar el texto del rol si es muy largo
