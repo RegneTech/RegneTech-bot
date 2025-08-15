@@ -199,7 +199,7 @@ class Perfil(commands.Cog):
         avatar_size = 220
         avatar_circular = self.create_circle_avatar(avatar, avatar_size)
         avatar_x = (width - avatar_size) - 542 
-        avatar_y = 50
+        avatar_y = 49
         
         # Borde cyan alrededor del avatar
         draw.ellipse(
