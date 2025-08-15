@@ -66,23 +66,39 @@ class Perfil(commands.Cog):
     def get_font(self, size: int, bold: bool = False):
         """Obtiene una fuente con el tamaño especificado"""
         try:
+            # Primero intentar cargar la fuente Orbitron específica
+            orbitron_path = "resources/fonts/Orbitron-Medium.ttf"
+            if os.path.exists(orbitron_path):
+                return ImageFont.truetype(orbitron_path, size)
+            
+            # Intentar otras variantes de Orbitron
+            orbitron_variants = [
+                "resources/fonts/Orbitron-Bold.ttf",
+                "resources/fonts/Orbitron-Regular.ttf",
+                "resources/fonts/Orbitron.ttf"
+            ]
+            
+            for variant in orbitron_variants:
+                if os.path.exists(variant):
+                    return ImageFont.truetype(variant, size)
+            
+            # Fallback a fuentes genéricas si Orbitron no está disponible
             if bold:
                 font_files = ['bold.ttf', 'arial-bold.ttf', 'roboto-bold.ttf', 'font-bold.ttf']
                 for font_file in font_files:
-                    try:
-                        return ImageFont.truetype(f"{self.font_path}/{font_file}", size)  # Cambio: agregar /
-                    except:
-                        continue
+                    font_path = f"{self.font_path}/{font_file}"
+                    if os.path.exists(font_path):
+                        return ImageFont.truetype(font_path, size)
             else:
                 font_files = ['regular.ttf', 'arial.ttf', 'roboto.ttf', 'font.ttf']
                 for font_file in font_files:
-                    try:
-                        return ImageFont.truetype(f"{self.font_path}/{font_file}", size)  # Cambio: agregar /
-                    except:
-                        continue
-        except:
-            pass
+                    font_path = f"{self.font_path}/{font_file}"
+                    if os.path.exists(font_path):
+                        return ImageFont.truetype(font_path, size)
+        except Exception as e:
+            print(f"Error cargando fuente: {e}")
         
+        # Fuente por defecto si no encuentra ninguna personalizada
         return ImageFont.load_default()
     
     def create_rounded_rectangle(self, width: int, height: int, radius: int, color: tuple):
@@ -153,15 +169,15 @@ class Perfil(commands.Cog):
         )
         
         # Simular trofeo con texto (sin emoji por compatibilidad)
-        font = self.get_font(30, bold=True)
-        draw.text((x + width//2 - 15, y + height//2 - 20), "🏆", 
+        font = self.get_font(36, bold=True)  # Más grande para el tamaño aumentado
+        draw.text((x + width//2 - 18, y + height//2 - 25), "🏆", 
                  font=font, fill=border_color)
     
     async def create_profile_image(self, user, user_data: dict, guild_config: dict, 
                                  balance: float, rank: int):
         """Crea la imagen del perfil con el diseño exacto de la imagen"""
-        # Dimensiones 3:4 como solicitado
-        width, height = 600, 800
+        # Dimensiones exactas especificadas
+        width, height = 820, 950
         
         # Crear imagen base con fondo azul oscuro como en la imagen
         try:
@@ -192,11 +208,13 @@ class Perfil(commands.Cog):
         avatar_size = 140
         avatar_circular = self.create_circle_avatar(avatar, avatar_size)
         
-        # === LAYOUT ADAPTADO PARA FORMATO 3:4 ===
+        # === LAYOUT ADAPTADO PARA 820x950 ===
         
-        # Avatar en la parte superior centrado
+        # Avatar en la parte superior centrado - más grande para la resolución
+        avatar_size = 160
+        avatar_circular = self.create_circle_avatar(avatar, avatar_size)
         avatar_x = (width - avatar_size) // 2
-        avatar_y = 40
+        avatar_y = 60
         
         # Borde cyan alrededor del avatar
         draw.ellipse(
@@ -207,11 +225,11 @@ class Perfil(commands.Cog):
         
         background.paste(avatar_circular, (avatar_x, avatar_y), avatar_circular)
         
-        # Fuentes más grandes
-        font_huge = self.get_font(42, bold=True)    # Para el nombre
-        font_large = self.get_font(28, bold=True)   # Para nivel
-        font_medium = self.get_font(22, bold=True)  # Para textos importantes
-        font_small = self.get_font(18)              # Para detalles
+        # Fuentes más grandes para la resolución 820x950
+        font_huge = self.get_font(48, bold=True)    # Para el nombre
+        font_large = self.get_font(32, bold=True)   # Para nivel
+        font_medium = self.get_font(26, bold=True)  # Para textos importantes
+        font_small = self.get_font(20)              # Para detalles
         
         # === INFORMACIÓN DEL USUARIO (DEBAJO DEL AVATAR) ===
         
@@ -237,22 +255,22 @@ class Perfil(commands.Cog):
         
         draw.text((level_x, info_y + 60), level_text, font=font_large, fill=cyan_bright)
         
-        # === BARRAS DE PROGRESO CENTRADAS ===
+        # === BARRAS DE PROGRESO ADAPTADAS PARA 820x950 ===
         
-        progress_y = info_y + 140
+        progress_y = info_y + 160
         
         # Primera barra de progreso (XP) - adaptada al ancho
         progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
         
-        bar_width = width - 80  # Margen de 40px a cada lado
-        bar_height = 30
-        bar_x = 40
+        bar_width = width - 100  # Margen de 50px a cada lado
+        bar_height = 35  # Más alta para mejor proporción
+        bar_x = 50
         
         self.draw_progress_bar(
             draw, bar_x, progress_y, bar_width, bar_height, progress,
             bg_color=darker_blue,
             fill_color=cyan_bright,
-            radius=15
+            radius=18
         )
         
         # Texto de XP centrado sobre la barra
@@ -260,16 +278,16 @@ class Perfil(commands.Cog):
         bbox = draw.textbbox((0, 0), xp_text, font=font_small)
         text_width = bbox[2] - bbox[0]
         xp_x = (width - text_width) // 2
-        draw.text((xp_x, progress_y - 30), xp_text, font=font_small, fill=white_text)
+        draw.text((xp_x, progress_y - 35), xp_text, font=font_small, fill=white_text)
         
         # Segunda barra (ejemplo: progreso semanal)
         weekly_progress = min(user_data['weekly_xp'] / 1000, 1.0)
         
         self.draw_progress_bar(
-            draw, bar_x, progress_y + 80, bar_width, bar_height, weekly_progress,
+            draw, bar_x, progress_y + 100, bar_width, bar_height, weekly_progress,
             bg_color=darker_blue,
             fill_color=cyan_bright,
-            radius=15
+            radius=18
         )
         
         # Texto centrado sobre la segunda barra
@@ -277,13 +295,13 @@ class Perfil(commands.Cog):
         bbox = draw.textbbox((0, 0), weekly_text, font=font_small)
         text_width = bbox[2] - bbox[0]
         weekly_x = (width - text_width) // 2
-        draw.text((weekly_x, progress_y + 50), weekly_text, font=font_small, fill=white_text)
+        draw.text((weekly_x, progress_y + 65), weekly_text, font=font_small, fill=white_text)
         
-        # === CAJAS DE TROFEOS CENTRADAS ===
+        # === CAJAS DE TROFEOS ADAPTADAS PARA 820x950 ===
         
-        trophies_y = progress_y + 160
-        trophy_width = 120
-        trophy_height = 80
+        trophies_y = progress_y + 180
+        trophy_width = 140  # Más grandes
+        trophy_height = 90  # Más altas
         
         # Calcular espaciado para centrar las 3 cajas
         total_trophies_width = 3 * trophy_width
@@ -298,20 +316,20 @@ class Perfil(commands.Cog):
                 draw, trophy_x, trophies_y, trophy_width, trophy_height,
                 bg_color=darker_blue,
                 border_color=cyan_dark if i != 1 else cyan_bright,  # Destacar el del medio
-                radius=15
+                radius=18
             )
         
-        # === PANELES INFERIORES APILADOS VERTICALMENTE ===
+        # === PANELES INFERIORES ADAPTADOS PARA 820x950 ===
         
-        panels_y = trophies_y + 120
-        panel_width = width - 80  # Margen de 40px a cada lado
-        panel_height = 60
-        panel_x = 40
+        panels_y = trophies_y + 140
+        panel_width = width - 100  # Margen de 50px a cada lado
+        panel_height = 70  # Más altos
+        panel_x = 50
         
         # Panel de dinero
         draw.rounded_rectangle(
             [(panel_x, panels_y), (panel_x + panel_width, panels_y + panel_height)],
-            radius=15,
+            radius=18,
             fill=darker_blue,
             outline=cyan_bright,
             width=3
@@ -322,14 +340,14 @@ class Perfil(commands.Cog):
         bbox = draw.textbbox((0, 0), money_text, font=font_medium)
         text_width = bbox[2] - bbox[0]
         money_x = (width - text_width) // 2
-        draw.text((money_x, panels_y + 15), money_text, font=font_medium, fill=cyan_bright)
+        draw.text((money_x, panels_y + 20), money_text, font=font_medium, fill=cyan_bright)
         
         # Panel de rank (debajo del de dinero)
-        rank_y = panels_y + panel_height + 20
+        rank_y = panels_y + panel_height + 30
         
         draw.rounded_rectangle(
             [(panel_x, rank_y), (panel_x + panel_width, rank_y + panel_height)],
-            radius=15,
+            radius=18,
             fill=darker_blue,
             outline=cyan_bright,
             width=3
@@ -340,14 +358,14 @@ class Perfil(commands.Cog):
         bbox = draw.textbbox((0, 0), rank_text, font=font_medium)
         text_width = bbox[2] - bbox[0]
         rank_x = (width - text_width) // 2
-        draw.text((rank_x, rank_y + 15), rank_text, font=font_medium, fill=cyan_bright)
+        draw.text((rank_x, rank_y + 20), rank_text, font=font_medium, fill=cyan_bright)
         
         # === DETALLES ADICIONALES ===
         
         # Líneas decorativas centradas
-        line_margin = 60
-        draw.line([(line_margin, progress_y - 10), (width - line_margin, progress_y - 10)], 
-                 fill=cyan_dark, width=2)
+        line_margin = 80
+        draw.line([(line_margin, progress_y - 15), (width - line_margin, progress_y - 15)], 
+                 fill=cyan_dark, width=3)
         
         return background
     
