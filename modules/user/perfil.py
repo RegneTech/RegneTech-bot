@@ -233,11 +233,11 @@ class Perfil(commands.Cog):
         draw.text((username_x, info_y), username, font=font_huge, fill=white_text)
         
         # Nivel centrado
-        level_text = f"Nivel {level}"
+        level_text = f"{level}"
         bbox = draw.textbbox((0, 0), level_text, font=font_large)
         text_width = bbox[2] - bbox[0]
-        level_x = (width - text_width) // 2
-        
+        level_x = (width - text_width) -200
+
         draw.text((level_x, info_y + 60), level_text, font=font_large, fill=cyan_bright)
         
         # === UNA SOLA BARRA DE PROGRESO ===
