@@ -152,26 +152,8 @@ class Perfil(commands.Cog):
     
     def draw_trophy_box(self, draw, x: int, y: int, width: int, height: int, 
                        bg_color: tuple, border_color: tuple, radius: int = 15):
-        """Dibuja una caja de trofeo como en la imagen"""
-        # Fondo de la caja
-        draw.rounded_rectangle(
-            [(x, y), (x + width, y + height)],
-            radius=radius,
-            fill=bg_color
-        )
-        
-        # Borde cyan
-        draw.rounded_rectangle(
-            [(x, y), (x + width, y + height)],
-            radius=radius,
-            outline=border_color,
-            width=2
-        )
-        
-        # Simular trofeo con texto (sin emoji por compatibilidad)
-        font = self.get_font(36, bold=True)  # Más grande para el tamaño aumentado
-        draw.text((x + width//2 - 18, y + height//2 - 25), "🏆", 
-                 font=font, fill=border_color)
+        """Esta función ya no se usa en el diseño simplificado"""
+        pass
     
     async def create_profile_image(self, user, user_data: dict, guild_config: dict, 
                                  balance: float, rank: int):
@@ -233,7 +215,7 @@ class Perfil(commands.Cog):
         
         # === INFORMACIÓN DEL USUARIO (DEBAJO DEL AVATAR) ===
         
-        info_y = avatar_y + avatar_size + 30
+        info_y = avatar_y + avatar_size + 40
         
         # Nombre del usuario centrado
         username = user.display_name
@@ -248,22 +230,22 @@ class Perfil(commands.Cog):
         draw.text((username_x, info_y), username, font=font_huge, fill=white_text)
         
         # Nivel centrado
-        level_text = f"NIVEL {level}"
+        level_text = f"Nivel {level}"
         bbox = draw.textbbox((0, 0), level_text, font=font_large)
         text_width = bbox[2] - bbox[0]
         level_x = (width - text_width) // 2
         
         draw.text((level_x, info_y + 60), level_text, font=font_large, fill=cyan_bright)
         
-        # === BARRAS DE PROGRESO ADAPTADAS PARA 820x950 ===
+        # === UNA SOLA BARRA DE PROGRESO ===
         
-        progress_y = info_y + 160
+        progress_y = info_y + 140
         
-        # Primera barra de progreso (XP) - adaptada al ancho
+        # Barra de progreso de XP
         progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
         
-        bar_width = width - 100  # Margen de 50px a cada lado
-        bar_height = 35  # Más alta para mejor proporción
+        bar_width = width - 100
+        bar_height = 35
         bar_x = 50
         
         self.draw_progress_bar(
@@ -273,99 +255,34 @@ class Perfil(commands.Cog):
             radius=18
         )
         
-        # Texto de XP centrado sobre la barra
-        xp_text = f"XP: {current_xp:,} / {next_level_xp:,}"
-        bbox = draw.textbbox((0, 0), xp_text, font=font_small)
-        text_width = bbox[2] - bbox[0]
-        xp_x = (width - text_width) // 2
-        draw.text((xp_x, progress_y - 35), xp_text, font=font_small, fill=white_text)
+        # Texto "EXP" a la izquierda de la experiencia
+        exp_label_x = bar_x
+        exp_label_y = progress_y + bar_height + 15
+        draw.text((exp_label_x, exp_label_y), "EXP", font=font_small, fill=white_text)
         
-        # Segunda barra (ejemplo: progreso semanal)
-        weekly_progress = min(user_data['weekly_xp'] / 1000, 1.0)
+        # Experiencia (750/1000) abajo izquierda de la barra
+        exp_text = f"{current_xp}/{next_level_xp}"
+        exp_text_x = exp_label_x + 60  # Después del texto "EXP"
+        draw.text((exp_text_x, exp_label_y), exp_text, font=font_small, fill=white_text)
         
-        self.draw_progress_bar(
-            draw, bar_x, progress_y + 100, bar_width, bar_height, weekly_progress,
-            bg_color=darker_blue,
-            fill_color=cyan_bright,
-            radius=18
-        )
+        # === DINERO Y RANK ===
         
-        # Texto centrado sobre la segunda barra
-        weekly_text = f"XP Semanal: {user_data['weekly_xp']:,}"
-        bbox = draw.textbbox((0, 0), weekly_text, font=font_small)
-        text_width = bbox[2] - bbox[0]
-        weekly_x = (width - text_width) // 2
-        draw.text((weekly_x, progress_y + 65), weekly_text, font=font_small, fill=white_text)
+        money_y = progress_y + bar_height + 80
         
-        # === CAJAS DE TROFEOS ADAPTADAS PARA 820x950 ===
-        
-        trophies_y = progress_y + 180
-        trophy_width = 140  # Más grandes
-        trophy_height = 90  # Más altas
-        
-        # Calcular espaciado para centrar las 3 cajas
-        total_trophies_width = 3 * trophy_width
-        available_space = width - total_trophies_width
-        trophy_spacing = available_space // 4  # Espacios: inicio, entre1, entre2, final
-        
-        # Tres cajas de trofeos centradas
-        for i in range(3):
-            trophy_x = trophy_spacing + (i * (trophy_width + trophy_spacing))
-            
-            self.draw_trophy_box(
-                draw, trophy_x, trophies_y, trophy_width, trophy_height,
-                bg_color=darker_blue,
-                border_color=cyan_dark if i != 1 else cyan_bright,  # Destacar el del medio
-                radius=18
-            )
-        
-        # === PANELES INFERIORES ADAPTADOS PARA 820x950 ===
-        
-        panels_y = trophies_y + 140
-        panel_width = width - 100  # Margen de 50px a cada lado
-        panel_height = 70  # Más altos
-        panel_x = 50
-        
-        # Panel de dinero
-        draw.rounded_rectangle(
-            [(panel_x, panels_y), (panel_x + panel_width, panels_y + panel_height)],
-            radius=18,
-            fill=darker_blue,
-            outline=cyan_bright,
-            width=3
-        )
-        
-        # Símbolo de euro y cantidad centrado
-        money_text = f"€ {balance:,.2f}"
+        # Símbolo € y dinero
+        money_text = f"€ {balance:.2f}"
         bbox = draw.textbbox((0, 0), money_text, font=font_medium)
         text_width = bbox[2] - bbox[0]
         money_x = (width - text_width) // 2
-        draw.text((money_x, panels_y + 20), money_text, font=font_medium, fill=cyan_bright)
+        draw.text((money_x, money_y), money_text, font=font_medium, fill=cyan_bright)
         
-        # Panel de rank (debajo del de dinero)
-        rank_y = panels_y + panel_height + 30
-        
-        draw.rounded_rectangle(
-            [(panel_x, rank_y), (panel_x + panel_width, rank_y + panel_height)],
-            radius=18,
-            fill=darker_blue,
-            outline=cyan_bright,
-            width=3
-        )
-        
-        # Texto RANK centrado
-        rank_text = f"RANK #{rank}"
+        # Rank en formato #2
+        rank_text = f"#{rank}"
         bbox = draw.textbbox((0, 0), rank_text, font=font_medium)
         text_width = bbox[2] - bbox[0]
         rank_x = (width - text_width) // 2
-        draw.text((rank_x, rank_y + 20), rank_text, font=font_medium, fill=cyan_bright)
-        
-        # === DETALLES ADICIONALES ===
-        
-        # Líneas decorativas centradas
-        line_margin = 80
-        draw.line([(line_margin, progress_y - 15), (width - line_margin, progress_y - 15)], 
-                 fill=cyan_dark, width=3)
+        rank_y = money_y + 60
+        draw.text((rank_x, rank_y), rank_text, font=font_medium, fill=cyan_bright)
         
         return background
     
