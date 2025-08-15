@@ -230,7 +230,7 @@ class Perfil(commands.Cog):
         text_width = bbox[2] - bbox[0]
         username_x = (width - text_width) + -200
 
-        draw.text((username_x, info_y), username, font=font_huge, fill=white_text)
+        draw.text((username_x, info_y + 20), username, font=font_huge, fill=white_text)
         
         # Nivel centrado
         level_text = f"{level}"
@@ -238,7 +238,7 @@ class Perfil(commands.Cog):
         text_width = bbox[2] - bbox[0]
         level_x = (width - text_width) -100
 
-        draw.text((level_x, info_y + 60), level_text, font=font_large, fill=cyan_bright)
+        draw.text((level_x, info_y + 100), level_text, font=font_large, fill=cyan_bright)
         
         # === UNA SOLA BARRA DE PROGRESO ===
         
