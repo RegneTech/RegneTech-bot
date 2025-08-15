@@ -15,8 +15,8 @@ import math
 class Perfil(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.font_path = "resources\fonts"  # Carpeta donde están las fuentes
-        self.bg_path = "resources\images\perfil"  # Carpeta donde están los fondos
+        self.font_path = "resources/fonts"  # Cambio: usar / en lugar de \
+        self.bg_path = "resources/images/perfil"  # Cambio: usar / en lugar de \
     
     def calculate_level_xp(self, level: int, formula: str = 'exponential') -> int:
         """Calcula la XP necesaria para un nivel específico"""
@@ -67,25 +67,22 @@ class Perfil(commands.Cog):
         """Obtiene una fuente con el tamaño especificado"""
         try:
             if bold:
-                # Buscar archivos de fuente bold en la carpeta fonts
                 font_files = ['bold.ttf', 'arial-bold.ttf', 'roboto-bold.ttf', 'font-bold.ttf']
                 for font_file in font_files:
                     try:
-                        return ImageFont.truetype(f"{self.font_path}{font_file}", size)
+                        return ImageFont.truetype(f"{self.font_path}/{font_file}", size)  # Cambio: agregar /
                     except:
                         continue
             else:
-                # Buscar archivos de fuente regular en la carpeta fonts
                 font_files = ['regular.ttf', 'arial.ttf', 'roboto.ttf', 'font.ttf']
                 for font_file in font_files:
                     try:
-                        return ImageFont.truetype(f"{self.font_path}{font_file}", size)
+                        return ImageFont.truetype(f"{self.font_path}/{font_file}", size)  # Cambio: agregar /
                     except:
                         continue
         except:
             pass
         
-        # Fuente por defecto si no encuentra ninguna personalizada
         return ImageFont.load_default()
     
     def create_rounded_rectangle(self, width: int, height: int, radius: int, color: tuple):
@@ -93,7 +90,6 @@ class Perfil(commands.Cog):
         img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
-        # Dibujar el rectángulo redondeado
         draw.rounded_rectangle(
             [(0, 0), (width, height)],
             radius=radius,
@@ -119,16 +115,16 @@ class Perfil(commands.Cog):
         return result
     
     def draw_progress_bar(self, draw, x: int, y: int, width: int, height: int, 
-                         progress: float, bg_color: tuple, fill_color: tuple, radius: int = 10):
-        """Dibuja una barra de progreso"""
-        # Fondo de la barra
+                         progress: float, bg_color: tuple, fill_color: tuple, radius: int = 15):
+        """Dibuja una barra de progreso con el estilo de la imagen"""
+        # Fondo de la barra (más oscuro)
         draw.rounded_rectangle(
             [(x, y), (x + width, y + height)],
             radius=radius,
             fill=bg_color
         )
         
-        # Barra de progreso
+        # Barra de progreso (cyan brillante)
         if progress > 0:
             progress_width = int(width * progress)
             if progress_width > radius * 2:
@@ -138,135 +134,205 @@ class Perfil(commands.Cog):
                     fill=fill_color
                 )
     
+    def draw_trophy_box(self, draw, x: int, y: int, width: int, height: int, 
+                       bg_color: tuple, border_color: tuple, radius: int = 15):
+        """Dibuja una caja de trofeo como en la imagen"""
+        # Fondo de la caja
+        draw.rounded_rectangle(
+            [(x, y), (x + width, y + height)],
+            radius=radius,
+            fill=bg_color
+        )
+        
+        # Borde cyan
+        draw.rounded_rectangle(
+            [(x, y), (x + width, y + height)],
+            radius=radius,
+            outline=border_color,
+            width=2
+        )
+        
+        # Simular trofeo con texto (sin emoji por compatibilidad)
+        font = self.get_font(30, bold=True)
+        draw.text((x + width//2 - 15, y + height//2 - 20), "🏆", 
+                 font=font, fill=border_color)
+    
     async def create_profile_image(self, user, user_data: dict, guild_config: dict, 
                                  balance: float, rank: int):
-        """Crea la imagen del perfil"""
-        # Dimensiones de la imagen
-        width, height = 800, 400
+        """Crea la imagen del perfil con el diseño exacto de la imagen"""
+        # Dimensiones de la imagen (más grande para mejor calidad)
+        width, height = 900, 500
         
-        # Crear imagen base
+        # Crear imagen base con fondo azul oscuro como en la imagen
         try:
             # Intentar cargar fondo personalizado
-            background = Image.open(f"{self.bg_path}perfil.png").resize((width, height))
-        except:
-            # Fondo degradado por defecto
-            background = Image.new('RGB', (width, height), (47, 49, 54))
+            background = Image.open(f"{self.bg_path}/perfil.png").resize((width, height))  # Cambio: agregar /
+        except Exception as e:
+            print(f"No se pudo cargar la imagen de fondo: {e}")
+            # Fondo azul oscuro como en la imagen
+            background = Image.new('RGB', (width, height), (20, 35, 60))  # Color azul oscuro
             
-        # Crear overlay semi-transparente
-        overlay = Image.new('RGBA', (width, height), (0, 0, 0, 100))
         background = background.convert('RGBA')
-        background = Image.alpha_composite(background, overlay)
-        
         draw = ImageDraw.Draw(background)
+        
+        # Colores exactos de la imagen
+        cyan_bright = (0, 255, 255)  # Cyan brillante
+        cyan_dark = (0, 180, 200)    # Cyan más oscuro
+        dark_blue = (15, 25, 45)     # Azul muy oscuro para fondos
+        darker_blue = (10, 20, 35)   # Azul aún más oscuro
+        white_text = (255, 255, 255) # Texto blanco
         
         # Obtener datos del usuario
         level, current_xp, next_level_xp = self.get_level_from_xp(
             user_data['xp'], guild_config['level_formula']
         )
         
-        # Descargar y procesar avatar
+        # Descargar y procesar avatar (más grande)
         avatar = await self.get_user_avatar(user)
-        avatar_circular = self.create_circle_avatar(avatar, 120)
+        avatar_size = 140
+        avatar_circular = self.create_circle_avatar(avatar, avatar_size)
         
-        # Posicionar avatar
-        avatar_x, avatar_y = 50, 50
-        background.paste(avatar_circular, (avatar_x, avatar_y), avatar_circular)
+        # === LAYOUT COMO EN LA IMAGEN ===
         
-        # Fuentes
-        font_large = self.get_font(32, bold=True)
-        font_medium = self.get_font(24)
-        font_small = self.get_font(18)
-        font_tiny = self.get_font(14)
+        # Avatar en la esquina superior izquierda con borde cyan
+        avatar_x, avatar_y = 60, 50
         
-        # Colores
-        text_color = (10, 231, 255)  # #0AE7FF
-        accent_color = (10, 231, 255)  # #0AE7FF para barra de progreso
-        success_color = (67, 181, 129)  # Verde para dinero
-        warning_color = (250, 166, 26)  # Naranja para rank
-        
-        # === INFORMACIÓN DEL USUARIO ===
-        
-        # Nombre del usuario
-        username = user.display_name
-        if len(username) > 20:
-            username = username[:17] + "..."
-        
-        draw.text((200, 60), username, font=font_large, fill=text_color)
-        
-        # Nivel actual
-        level_text = f"Nivel {level}"
-        draw.text((200, 100), level_text, font=font_medium, fill=accent_color)
-        
-        # === BARRA DE PROGRESO DE XP ===
-        
-        progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
-        
-        # Texto de XP
-        xp_text = f"{current_xp:,} / {next_level_xp:,} XP"
-        draw.text((200, 140), xp_text, font=font_small, fill=text_color)
-        
-        # Barra de progreso
-        self.draw_progress_bar(
-            draw, 200, 170, 300, 20, progress,
-            bg_color=(60, 60, 60, 180),
-            fill_color=accent_color,
-            radius=10
+        # Borde cyan alrededor del avatar
+        draw.ellipse(
+            [(avatar_x - 5, avatar_y - 5), (avatar_x + avatar_size + 5, avatar_y + avatar_size + 5)],
+            outline=cyan_bright,
+            width=4
         )
         
-        # Porcentaje
-        percentage_text = f"{progress * 100:.1f}%"
-        draw.text((520, 165), percentage_text, font=font_tiny, fill=text_color)
+        background.paste(avatar_circular, (avatar_x, avatar_y), avatar_circular)
         
-        # === ESTADÍSTICAS ===
+        # Fuentes más grandes
+        font_huge = self.get_font(42, bold=True)    # Para el nombre
+        font_large = self.get_font(28, bold=True)   # Para nivel
+        font_medium = self.get_font(22, bold=True)  # Para textos importantes
+        font_small = self.get_font(18)              # Para detalles
         
-        stats_y = 220
+        # === INFORMACIÓN DEL USUARIO (DERECHA DEL AVATAR) ===
         
-        # XP Total
-        total_xp_text = f"XP Total: {user_data['xp']:,}"
-        draw.text((50, stats_y), total_xp_text, font=font_small, fill=text_color)
+        info_x = avatar_x + avatar_size + 40
         
-        # Dinero
-        money_text = f"💰 Dinero: ${balance:,.2f}"
-        draw.text((50, stats_y + 30), money_text, font=font_small, fill=success_color)
+        # Nombre del usuario (más grande)
+        username = user.display_name
+        if len(username) > 15:
+            username = username[:12] + "..."
         
-        # Ranking
-        rank_text = f"🏆 Rank: #{rank}"
-        draw.text((50, stats_y + 60), rank_text, font=font_small, fill=warning_color)
+        draw.text((info_x, avatar_y + 20), username, font=font_huge, fill=white_text)
         
-        # === ESTADÍSTICAS ADICIONALES (LADO DERECHO) ===
+        # Nivel (con estilo cyan)
+        level_text = f"NIVEL {level}"
+        draw.text((info_x, avatar_y + 80), level_text, font=font_large, fill=cyan_bright)
         
-        # XP Semanal
-        weekly_xp_text = f"XP Semanal: {user_data['weekly_xp']:,}"
-        draw.text((400, stats_y), weekly_xp_text, font=font_small, fill=text_color)
+        # === BARRAS DE PROGRESO COMO EN LA IMAGEN ===
         
-        # XP Mensual
-        monthly_xp_text = f"XP Mensual: {user_data['monthly_xp']:,}"
-        draw.text((400, stats_y + 30), monthly_xp_text, font=font_small, fill=text_color)
+        progress_y = avatar_y + avatar_size + 40
         
-        # === DECORACIONES ===
+        # Primera barra de progreso (XP) - más larga
+        progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
         
-        # Marco alrededor del avatar
-        draw.ellipse(
-            [(avatar_x - 3, avatar_y - 3), (avatar_x + 123, avatar_y + 123)],
-            outline=accent_color,
+        bar_width = 600
+        bar_height = 25
+        
+        self.draw_progress_bar(
+            draw, 60, progress_y, bar_width, bar_height, progress,
+            bg_color=darker_blue,
+            fill_color=cyan_bright,
+            radius=15
+        )
+        
+        # Texto de XP sobre la barra
+        xp_text = f"XP: {current_xp:,} / {next_level_xp:,}"
+        draw.text((60, progress_y - 30), xp_text, font=font_small, fill=white_text)
+        
+        # Segunda barra (ejemplo: progreso semanal)
+        weekly_progress = min(user_data['weekly_xp'] / 1000, 1.0)  # Ejemplo
+        
+        self.draw_progress_bar(
+            draw, 60, progress_y + 60, bar_width, bar_height, weekly_progress,
+            bg_color=darker_blue,
+            fill_color=cyan_bright,
+            radius=15
+        )
+        
+        # Texto sobre la segunda barra
+        draw.text((60, progress_y + 30), f"XP Semanal: {user_data['weekly_xp']:,}", 
+                 font=font_small, fill=white_text)
+        
+        # === CAJAS DE TROFEOS (PARTE INFERIOR) ===
+        
+        trophies_y = progress_y + 120
+        trophy_width = 120
+        trophy_height = 80
+        trophy_spacing = 150
+        
+        # Tres cajas de trofeos como en la imagen
+        for i in range(3):
+            trophy_x = 60 + (i * trophy_spacing)
+            
+            self.draw_trophy_box(
+                draw, trophy_x, trophies_y, trophy_width, trophy_height,
+                bg_color=darker_blue,
+                border_color=cyan_dark if i != 1 else cyan_bright,  # Destacar el del medio
+                radius=15
+            )
+        
+        # === PANEL DE DINERO (IZQUIERDA INFERIOR) ===
+        
+        money_panel_y = trophies_y + 100
+        money_width = 350
+        money_height = 60
+        
+        # Panel de dinero con borde cyan
+        draw.rounded_rectangle(
+            [(60, money_panel_y), (60 + money_width, money_panel_y + money_height)],
+            radius=15,
+            fill=darker_blue,
+            outline=cyan_bright,
             width=3
         )
         
-        # Línea separadora
-        draw.line([(50, 210), (750, 210)], fill=(10, 231, 255, 100), width=2)
+        # Símbolo de euro y cantidad
+        draw.text((80, money_panel_y + 15), f"€ {balance:,.2f}", 
+                 font=font_medium, fill=cyan_bright)
+        
+        # === PANEL DE RANK (DERECHA INFERIOR) ===
+        
+        rank_x = 60 + money_width + 30
+        rank_width = 200
+        
+        # Panel de rank
+        draw.rounded_rectangle(
+            [(rank_x, money_panel_y), (rank_x + rank_width, money_panel_y + money_height)],
+            radius=15,
+            fill=darker_blue,
+            outline=cyan_bright,
+            width=3
+        )
+        
+        # Texto RANK
+        draw.text((rank_x + 20, money_panel_y + 15), f"RANK #{rank}", 
+                 font=font_medium, fill=cyan_bright)
+        
+        # === DETALLES ADICIONALES ===
+        
+        # Líneas decorativas
+        draw.line([(60, progress_y - 10), (width - 60, progress_y - 10)], 
+                 fill=cyan_dark, width=2)
         
         return background
     
-    @commands.command(name="perfillll", aliases=["profileee", "p"])
-    @commands.cooldown(1, 30, commands.BucketType.user)  # Cooldown de 30 segundos
-    async def perfillll(self, ctx, member: discord.Member = None):
+    @commands.command(name="perfil", aliases=["profile", "p"])
+    @commands.cooldown(1, 30, commands.BucketType.user)
+    async def perfil(self, ctx, member: discord.Member = None):
         """Muestra el perfil de un usuario con imagen personalizada"""
         
-        # Si no se especifica miembro, usar el autor del comando
         if member is None:
             member = ctx.author
         
-        # Verificar que no sea un bot
         if member.bot:
             embed = discord.Embed(
                 title="❌ Error",
@@ -304,7 +370,7 @@ class Perfil(commands.Cog):
             
             # Convertir imagen a bytes
             img_buffer = io.BytesIO()
-            profile_img.save(img_buffer, format='PNG')
+            profile_img.save(img_buffer, format='PNG', quality=95)
             img_buffer.seek(0)
             
             # Crear archivo de Discord
@@ -313,7 +379,7 @@ class Perfil(commands.Cog):
             # Crear embed básico
             embed = discord.Embed(
                 title=f"📊 Perfil de {member.display_name}",
-                color=0x7289da
+                color=0x00FFFF  # Color cyan
             )
             
             embed.set_image(url=f"attachment://perfil_{member.id}.png")
@@ -334,7 +400,7 @@ class Perfil(commands.Cog):
             )
             await ctx.send(embed=embed)
     
-    @perfillll.error
+    @perfil.error
     async def perfil_error(self, ctx, error):
         """Maneja errores del comando perfil"""
         if isinstance(error, commands.CommandOnCooldown):
@@ -346,8 +412,8 @@ class Perfil(commands.Cog):
             await ctx.send(embed=embed)
 
 async def setup(bot: commands.Bot):
-    # Crear directorios necesarios
-    os.makedirs("fonts", exist_ok=True)
-    os.makedirs("assets/backgrounds", exist_ok=True)
+    # Crear directorios necesarios con las rutas corregidas
+    os.makedirs("resources/fonts", exist_ok=True)
+    os.makedirs("resources/images/perfil", exist_ok=True)
     
     await bot.add_cog(Perfil(bot))
