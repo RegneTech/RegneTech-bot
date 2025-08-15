@@ -334,7 +334,7 @@ class Perfil(commands.Cog):
             )
             await ctx.send(embed=embed)
     
-    @perfil.error
+    @perfill.error
     async def perfil_error(self, ctx, error):
         """Maneja errores del comando perfil"""
         if isinstance(error, commands.CommandOnCooldown):
