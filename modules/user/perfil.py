@@ -185,6 +185,9 @@ class Perfil(commands.Cog):
             user_data['xp'], guild_config['level_formula']
         )
         
+        # Descargar y procesar avatar
+        avatar = await self.get_user_avatar(user)
+        
         # Descargar y procesar avatar (más grande)
         avatar = await self.get_user_avatar(user)
         avatar_size = 140
