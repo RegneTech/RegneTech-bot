@@ -249,7 +249,7 @@ class Perfil(commands.Cog):
         
         bar_width = width - 119
         bar_height = 46
-        bar_x = 58
+        bar_x = 57
         
         self.draw_progress_bar(
             draw, bar_x, progress_y, bar_width, bar_height, progress,
