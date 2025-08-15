@@ -236,9 +236,9 @@ class Perfil(commands.Cog):
         level_text = f"{level}"
         bbox = draw.textbbox((0, 0), level_text, font=font_large)
         text_width = bbox[2] - bbox[0]
-        level_x = (width - text_width) -95
+        level_x = (width - text_width) -93
 
-        draw.text((level_x, info_y + 110), level_text, font=font_large, fill=cyan_bright)
+        draw.text((level_x, info_y + 112), level_text, font=font_large, fill=cyan_bright)
         
         # === UNA SOLA BARRA DE PROGRESO ===
         
@@ -247,7 +247,7 @@ class Perfil(commands.Cog):
         # Barra de progreso de XP
         progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
         
-        bar_width = width - 100
+        bar_width = width + 100
         bar_height = 35
         bar_x = 50
         
