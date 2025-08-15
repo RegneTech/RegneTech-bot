@@ -196,9 +196,9 @@ class Perfil(commands.Cog):
         # === LAYOUT ADAPTADO PARA 820x950 ===
         
         # Avatar en la parte superior centrado - más grande para la resolución
-        avatar_size = 160
+        avatar_size = 200
         avatar_circular = self.create_circle_avatar(avatar, avatar_size)
-        avatar_x = (width - avatar_size) - 700 
+        avatar_x = (width - avatar_size) - 600 
         avatar_y = 60
         
         # Borde cyan alrededor del avatar
