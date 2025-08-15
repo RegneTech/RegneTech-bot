@@ -100,19 +100,6 @@ class Perfil(commands.Cog):
         except:
             return ImageFont.load_default()
     
-    def create_rounded_rectangle(self, width: int, height: int, radius: int, color: tuple):
-        """Crea un rectángulo con esquinas redondeadas"""
-        img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-        
-        draw.rounded_rectangle(
-            [(0, 0), (width, height)],
-            radius=radius,
-            fill=color
-        )
-        
-        return img
-    
     def create_circle_avatar(self, avatar_img: Image, size: int):
         """Convierte el avatar en circular"""
         avatar_img = avatar_img.resize((size, size), Image.Resampling.LANCZOS)
@@ -131,7 +118,7 @@ class Perfil(commands.Cog):
     
     def draw_progress_bar(self, draw, x: int, y: int, width: int, height: int, 
                          progress: float, bg_color: tuple, fill_color: tuple, radius: int = 15):
-        """Dibuja una barra de progreso"""
+        """Dibuja una barra de progreso redondeada"""
         # Fondo de la barra
         draw.rounded_rectangle(
             [(x, y), (x + width, y + height)],
@@ -142,16 +129,25 @@ class Perfil(commands.Cog):
         # Barra de progreso
         if progress > 0:
             progress_width = int(width * progress)
-            if progress_width > radius * 2:
+            if progress_width > radius:
                 draw.rounded_rectangle(
                     [(x, y), (x + progress_width, y + height)],
                     radius=radius,
                     fill=fill_color
                 )
     
-    def draw_info_box(self, draw, x: int, y: int, width: int, height: int, 
-                     bg_color: tuple, border_color: tuple, radius: int = 15, border_width: int = 3):
-        """Dibuja una caja de información con borde"""
+    def draw_rounded_box(self, draw, x: int, y: int, width: int, height: int, 
+                        color: tuple, radius: int = 15):
+        """Dibuja una caja redondeada"""
+        draw.rounded_rectangle(
+            [(x, y), (x + width, y + height)],
+            radius=radius,
+            fill=color
+        )
+    
+    def draw_outlined_box(self, draw, x: int, y: int, width: int, height: int, 
+                         bg_color: tuple, border_color: tuple, radius: int = 15, border_width: int = 3):
+        """Dibuja una caja con borde"""
         # Fondo
         draw.rounded_rectangle(
             [(x, y), (x + width, y + height)],
@@ -167,30 +163,72 @@ class Perfil(commands.Cog):
             width=border_width
         )
     
+    def draw_trophy_icon(self, draw, x: int, y: int, size: int, color: tuple):
+        """Dibuja un ícono de trofeo simple"""
+        # Base del trofeo
+        base_height = 6
+        base_y = y + size - base_height
+        draw.rectangle([
+            (x + size//4, base_y),
+            (x + 3*size//4, base_y + base_height)
+        ], fill=color)
+        
+        # Stem
+        stem_width = 4
+        stem_x = x + size//2 - stem_width//2
+        draw.rectangle([
+            (stem_x, base_y - 8),
+            (stem_x + stem_width, base_y)
+        ], fill=color)
+        
+        # Copa principal
+        cup_size = size - 16
+        cup_x = x + 8
+        cup_y = y + 4
+        draw.ellipse([
+            (cup_x, cup_y),
+            (cup_x + cup_size, cup_y + cup_size - 8)
+        ], fill=color)
+        
+        # Handles
+        handle_width = 6
+        # Left handle
+        draw.arc([
+            (cup_x - handle_width, cup_y + 4),
+            (cup_x + 4, cup_y + cup_size - 12)
+        ], start=270, end=90, fill=color, width=3)
+        
+        # Right handle
+        draw.arc([
+            (cup_x + cup_size - 4, cup_y + 4),
+            (cup_x + cup_size + handle_width, cup_y + cup_size - 12)
+        ], start=90, end=270, fill=color, width=3)
+    
     async def create_profile_image(self, user, user_data: dict, guild_config: dict, 
                                  balance: float, rank: int):
-        """Crea la imagen del perfil siguiendo exactamente la imagen de referencia"""
+        """Crea la imagen del perfil EXACTAMENTE como la imagen de referencia"""
         
-        # Dimensiones de la imagen de referencia
-        width, height = 600, 800
+        # Dimensiones exactas de la imagen de referencia
+        width, height = 600, 750
         
-        # Crear imagen base
+        # Crear imagen base con el fondo exacto
         try:
             background = Image.open(os.path.join(self.bg_path, "perfil.png")).resize((width, height))
         except Exception as e:
             print(f"No se pudo cargar la imagen de fondo: {e}")
-            # Fondo azul oscuro como en la imagen de referencia
-            background = Image.new('RGB', (width, height), (16, 31, 56))
+            # Fondo azul marino exacto de la imagen
+            background = Image.new('RGB', (width, height), (22, 35, 57))
             
         background = background.convert('RGBA')
         draw = ImageDraw.Draw(background)
         
-        # Colores exactos de la imagen de referencia
-        cyan_bright = (0, 255, 255)     # Cyan brillante para bordes y progress bar
-        cyan_text = (64, 224, 255)      # Cyan para texto
-        dark_bg = (25, 42, 70)          # Fondo oscuro para cajas
-        darker_bg = (15, 25, 45)        # Fondo más oscuro
-        white_text = (255, 255, 255)    # Texto blanco
+        # Colores EXACTOS de la imagen de referencia
+        cyan_bright = (0, 255, 255)      # Cyan brillante para bordes y barra
+        cyan_medium = (64, 224, 255)     # Cyan medio para texto
+        dark_blue = (28, 45, 75)         # Azul oscuro para cajas
+        darker_blue = (20, 32, 55)       # Azul más oscuro para fondos
+        white = (255, 255, 255)          # Blanco puro
+        trophy_color = (85, 120, 160)    # Color gris-azul para trofeos
         
         # Obtener datos del usuario
         level, current_xp, next_level_xp = self.get_level_from_xp(
@@ -202,184 +240,155 @@ class Perfil(commands.Cog):
         
         # === LAYOUT EXACTO DE LA IMAGEN DE REFERENCIA ===
         
-        # Avatar circular en la parte superior izquierda
-        avatar_size = 120
-        avatar_x = 50
-        avatar_y = 50
+        # 1. AVATAR CIRCULAR (esquina superior izquierda)
+        avatar_size = 140
+        avatar_x = 40
+        avatar_y = 40
         avatar_circular = self.create_circle_avatar(avatar, avatar_size)
         
-        # Borde cyan alrededor del avatar
+        # Borde cyan alrededor del avatar (más grueso)
+        border_width = 6
         draw.ellipse(
-            [(avatar_x - 4, avatar_y - 4), (avatar_x + avatar_size + 4, avatar_y + avatar_size + 4)],
+            [(avatar_x - border_width, avatar_y - border_width), 
+             (avatar_x + avatar_size + border_width, avatar_y + avatar_size + border_width)],
             outline=cyan_bright,
-            width=4
+            width=border_width
         )
         
         background.paste(avatar_circular, (avatar_x, avatar_y), avatar_circular)
         
-        # Fuentes
-        font_username = self.get_font(36, bold=True)  # Nombre de usuario
-        font_nivel = self.get_font(24, bold=True)     # "NIVEL"
-        font_level_num = self.get_font(32, bold=True) # Número del nivel
-        font_xp = self.get_font(20, bold=False)       # XP numbers
-        font_money = self.get_font(28, bold=True)     # Dinero
-        font_rank = self.get_font(24, bold=True)      # Rank
+        # Fuentes (tamaños ajustados para coincidir exactamente)
+        font_username = self.get_font(42, bold=True)    # Username grande
+        font_nivel_label = self.get_font(20, bold=True) # "NIVEL"
+        font_nivel_num = self.get_font(32, bold=True)   # Número del nivel
+        font_xp = self.get_font(22, bold=True)          # XP numbers
+        font_money = self.get_font(36, bold=True)       # Dinero
+        font_rank_label = self.get_font(18, bold=True)  # "RANK"
+        font_rank_num = self.get_font(28, bold=True)    # Número rank
         
-        # === INFORMACIÓN A LA DERECHA DEL AVATAR ===
+        # 2. USERNAME (a la derecha del avatar)
+        username_x = avatar_x + avatar_size + 30
+        username_y = avatar_y + 20
         
-        info_x = avatar_x + avatar_size + 30
-        
-        # Nombre de usuario (asegurar que sea visible)
+        # Asegurar que el username sea visible
         username = str(user.display_name)
         if len(username) > 12:
             username = username[:9] + "..."
-            
-        # Dibujar el nombre de usuario
-        draw.text((info_x, avatar_y + 10), username, font=font_username, fill=cyan_text)
         
-        # Cajas de nivel
-        nivel_y = avatar_y + 60
+        draw.text((username_x, username_y), username, font=font_username, fill=cyan_medium)
+        
+        # 3. CAJAS DE NIVEL (debajo del username)
+        nivel_y = username_y + 60
         
         # Caja "NIVEL"
-        nivel_box_width = 120
-        nivel_box_height = 40
-        self.draw_info_box(draw, info_x, nivel_y, nivel_box_width, nivel_box_height, 
-                          dark_bg, darker_bg, radius=8)
+        nivel_box_width = 140
+        nivel_box_height = 50
+        self.draw_rounded_box(draw, username_x, nivel_y, nivel_box_width, nivel_box_height, dark_blue, 12)
         
-        # Texto "NIVEL" centrado en la caja
+        # Texto "NIVEL" centrado
         nivel_text = "NIVEL"
-        bbox = draw.textbbox((0, 0), nivel_text, font=font_nivel)
+        bbox = draw.textbbox((0, 0), nivel_text, font=font_nivel_label)
         text_width = bbox[2] - bbox[0]
-        text_x = info_x + (nivel_box_width - text_width) // 2
-        text_y = nivel_y + (nivel_box_height - bbox[3] + bbox[1]) // 2
-        draw.text((text_x, text_y), nivel_text, font=font_nivel, fill=cyan_text)
+        text_x = username_x + (nivel_box_width - text_width) // 2
+        text_y = nivel_y + (nivel_box_height - (bbox[3] - bbox[1])) // 2
+        draw.text((text_x, text_y), nivel_text, font=font_nivel_label, fill=cyan_medium)
         
         # Caja del número de nivel
-        level_box_x = info_x + nivel_box_width + 10
-        level_box_width = 60
-        self.draw_info_box(draw, level_box_x, nivel_y, level_box_width, nivel_box_height,
-                          dark_bg, darker_bg, radius=8)
+        level_box_x = username_x + nivel_box_width + 15
+        level_box_width = 80
+        self.draw_rounded_box(draw, level_box_x, nivel_y, level_box_width, nivel_box_height, dark_blue, 12)
         
         # Número del nivel centrado
         level_text = str(level)
-        bbox = draw.textbbox((0, 0), level_text, font=font_level_num)
+        bbox = draw.textbbox((0, 0), level_text, font=font_nivel_num)
         text_width = bbox[2] - bbox[0]
         text_x = level_box_x + (level_box_width - text_width) // 2
-        text_y = nivel_y + (nivel_box_height - bbox[3] + bbox[1]) // 2
-        draw.text((text_x, text_y), level_text, font=font_level_num, fill=white_text)
+        text_y = nivel_y + (nivel_box_height - (bbox[3] - bbox[1])) // 2
+        draw.text((text_x, text_y), level_text, font=font_nivel_num, fill=white)
         
-        # === BARRA DE EXPERIENCIA ===
+        # 4. BARRA DE EXPERIENCIA (ancho completo)
+        exp_y = avatar_y + avatar_size + 30
+        bar_x = 40
+        bar_width = width - 80
+        bar_height = 30
         
-        exp_y = avatar_y + avatar_size + 40
-        
-        # Barra de progreso
         progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
-        bar_width = width - 100
-        bar_height = 25
-        bar_x = 50
         
         self.draw_progress_bar(
             draw, bar_x, exp_y, bar_width, bar_height, progress,
-            bg_color=darker_bg,
+            bg_color=darker_blue,
             fill_color=cyan_bright,
-            radius=12
+            radius=15
         )
         
-        # Texto de XP debajo de la barra
+        # XP text debajo de la barra
         xp_text = f"{current_xp} / {next_level_xp}"
-        draw.text((bar_x, exp_y + bar_height + 10), xp_text, font=font_xp, fill=cyan_text)
+        draw.text((bar_x, exp_y + bar_height + 15), xp_text, font=font_xp, fill=cyan_medium)
         
-        # === TROFEOS (PLACEHOLDER) ===
-        
-        trophy_y = exp_y + 80
-        trophy_size = 80
-        trophy_spacing = 20
+        # 5. TROFEOS (3 cajas centradas)
+        trophies_y = exp_y + 80
+        trophy_size = 90
+        trophy_spacing = 25
         
         # Calcular posición para centrar los 3 trofeos
-        total_trophies_width = (trophy_size * 3) + (trophy_spacing * 2)
-        trophy_start_x = (width - total_trophies_width) // 2
+        total_width = (trophy_size * 3) + (trophy_spacing * 2)
+        trophies_start_x = (width - total_width) // 2
         
         for i in range(3):
-            trophy_x = trophy_start_x + i * (trophy_size + trophy_spacing)
+            trophy_x = trophies_start_x + i * (trophy_size + trophy_spacing)
             
-            # Dibujar caja del trofeo
-            self.draw_info_box(draw, trophy_x, trophy_y, trophy_size, trophy_size,
-                              dark_bg, darker_bg, radius=12)
+            # Caja del trofeo
+            self.draw_rounded_box(draw, trophy_x, trophies_y, trophy_size, trophy_size, dark_blue, 15)
             
-            # Dibujar símbolo de trofeo simple (rectángulo y líneas)
-            trophy_inner_x = trophy_x + 20
-            trophy_inner_y = trophy_y + 15
-            trophy_inner_size = 40
-            
-            # Base del trofeo
-            draw.rectangle([
-                (trophy_inner_x + 10, trophy_inner_y + 30),
-                (trophy_inner_x + 30, trophy_inner_y + 35)
-            ], fill=(70, 100, 130))
-            
-            # Copa del trofeo
-            draw.ellipse([
-                (trophy_inner_x + 5, trophy_inner_y + 10),
-                (trophy_inner_x + 35, trophy_inner_y + 30)
-            ], fill=(70, 100, 130))
-            
-            # Asas del trofeo
-            draw.arc([
-                (trophy_inner_x, trophy_inner_y + 12),
-                (trophy_inner_x + 10, trophy_inner_y + 25)
-            ], start=270, end=90, fill=(70, 100, 130), width=2)
-            
-            draw.arc([
-                (trophy_inner_x + 30, trophy_inner_y + 12),
-                (trophy_inner_x + 40, trophy_inner_y + 25)
-            ], start=90, end=270, fill=(70, 100, 130), width=2)
+            # Ícono de trofeo
+            icon_size = 50
+            icon_x = trophy_x + (trophy_size - icon_size) // 2
+            icon_y = trophies_y + (trophy_size - icon_size) // 2
+            self.draw_trophy_icon(draw, icon_x, icon_y, icon_size, trophy_color)
         
-        # === DINERO Y RANK ===
+        # 6. DINERO Y RANK (parte inferior)
+        bottom_y = trophies_y + trophy_size + 40
         
-        bottom_y = trophy_y + trophy_size + 40
+        # Caja de dinero (izquierda, con borde cyan)
+        money_width = 350
+        money_height = 70
+        money_x = 40
         
-        # Caja de dinero (más grande, a la izquierda)
-        money_width = 300
-        money_height = 60
-        money_x = 50
+        self.draw_outlined_box(draw, money_x, bottom_y, money_width, money_height,
+                              dark_blue, cyan_bright, 15, 4)
         
-        self.draw_info_box(draw, money_x, bottom_y, money_width, money_height,
-                          dark_bg, cyan_bright, radius=15, border_width=3)
+        # Símbolo € y cantidad
+        euro_text = f"€ {int(balance)}"
         
-        # Símbolo de euro y cantidad
-        euro_symbol = "€"
-        money_text = f"{euro_symbol} {int(balance)}"
-        
-        # Centrar el texto en la caja de dinero
-        bbox = draw.textbbox((0, 0), money_text, font=font_money)
+        # Centrar texto en la caja de dinero
+        bbox = draw.textbbox((0, 0), euro_text, font=font_money)
         text_width = bbox[2] - bbox[0]
         text_height = bbox[3] - bbox[1]
         text_x = money_x + (money_width - text_width) // 2
         text_y = bottom_y + (money_height - text_height) // 2
         
-        draw.text((text_x, text_y), money_text, font=font_money, fill=cyan_text)
+        draw.text((text_x, text_y), euro_text, font=font_money, fill=cyan_medium)
         
-        # Caja de rank (a la derecha)
-        rank_width = 150
-        rank_height = 60
+        # Caja de rank (derecha)
+        rank_width = 160
+        rank_height = 70
         rank_x = money_x + money_width + 50
         
-        self.draw_info_box(draw, rank_x, bottom_y, rank_width, rank_height,
-                          dark_bg, darker_bg, radius=15)
+        self.draw_rounded_box(draw, rank_x, bottom_y, rank_width, rank_height, dark_blue, 15)
         
-        # Texto "RANK" arriba
+        # "RANK" arriba
         rank_label = "RANK"
-        bbox = draw.textbbox((0, 0), rank_label, font=font_rank)
+        bbox = draw.textbbox((0, 0), rank_label, font=font_rank_label)
         text_width = bbox[2] - bbox[0]
         text_x = rank_x + (rank_width - text_width) // 2
-        draw.text((text_x, bottom_y + 5), rank_label, font=font_rank, fill=cyan_text)
+        draw.text((text_x, bottom_y + 12), rank_label, font=font_rank_label, fill=cyan_medium)
         
         # Número de rank abajo
         rank_text = f"#{rank}"
-        bbox = draw.textbbox((0, 0), rank_text, font=font_money)
+        bbox = draw.textbbox((0, 0), rank_text, font=font_rank_num)
         text_width = bbox[2] - bbox[0]
         text_x = rank_x + (rank_width - text_width) // 2
-        draw.text((text_x, bottom_y + 30), rank_text, font=font_money, fill=cyan_text)
+        draw.text((text_x, bottom_y + 38), rank_text, font=font_rank_num, fill=cyan_medium)
         
         return background
     
@@ -428,7 +437,7 @@ class Perfil(commands.Cog):
             
             # Convertir imagen a bytes
             img_buffer = io.BytesIO()
-            profile_img.save(img_buffer, format='PNG', quality=95)
+            profile_img.save(img_buffer, format='PNG', quality=95, optimize=True)
             img_buffer.seek(0)
             
             # Crear archivo de Discord
