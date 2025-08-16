@@ -190,9 +190,9 @@ class Verify(commands.Cog):
             color=0xFFD700  # Color dorado para las recompensas
         )
         
-        # Agregar recompensas por nivel (ya están en orden descendente)
+        # Agregar recompensas por nivel (de menor a mayor)
         reward_text = ""
-        for level in sorted(self.LEVEL_ROLES.keys(), reverse=True):
+        for level in sorted(self.LEVEL_ROLES.keys()):  # Sin reverse=True para orden ascendente
             role_id = self.LEVEL_ROLES[level]
             rewards = self.LEVEL_REWARDS.get(level, ["Sin recompensas definidas"])
             
@@ -200,91 +200,31 @@ class Verify(commands.Cog):
             for reward in rewards:
                 reward_text += f"• {reward}\n"
         
-        # Dividir el texto si es muy largo (Discord tiene límite de caracteres)
-        if len(reward_text) > 1024:
-            # Crear múltiples embeds si es necesario
-            embed.add_field(
-                name="Recompensas Disponibles",
-                value="*Lista completa de recompensas por nivel:*",
-                inline=False
-            )
-            
-            # Enviar el embed principal primero
-            await channel.send(embed=embed)
-            
-            # Crear embeds adicionales para las recompensas
-            current_text = ""
-            embed_count = 1
-            
-            for level in sorted(self.LEVEL_ROLES.keys(), reverse=True):
-                role_id = self.LEVEL_ROLES[level]
-                rewards = self.LEVEL_REWARDS.get(level, ["Sin recompensas definidas"])
-                
-                level_text = f"\n**NIVEL {level}** <@&{role_id}>\n"
-                for reward in rewards:
-                    level_text += f"• {reward}\n"
-                
-                # Si agregar este nivel excede el límite, crear un nuevo embed
-                if len(current_text + level_text) > 1000:
-                    reward_embed = discord.Embed(
-                        title=f"Recompensas por Niveles - Parte {embed_count}",
-                        description=current_text,
-                        color=0xFFD700
-                    )
-                    
-                    if guild.icon:
-                        reward_embed.set_thumbnail(url=guild.icon.url)
-                    
-                    await channel.send(embed=reward_embed)
-                    current_text = level_text
-                    embed_count += 1
-                else:
-                    current_text += level_text
-            
-            # Enviar el último embed si queda contenido
-            if current_text:
-                final_embed = discord.Embed(
-                    title=f"Recompensas por Niveles - Parte {embed_count}",
-                    description=current_text,
-                    color=0xFFD700
-                )
-                
-                if guild.icon:
-                    final_embed.set_thumbnail(url=guild.icon.url)
-                
-                final_embed.set_footer(
-                    text=f"Sistema de niveles de {guild.name} • ¡Sigue participando para desbloquear más recompensas!",
-                    icon_url=guild.icon.url if guild.icon else None
-                )
-                
-                await channel.send(embed=final_embed)
+        # Usar un solo embed sin dividir
+        embed.add_field(
+            name="Recompensas por Nivel",
+            value=reward_text,
+            inline=False
+        )
         
-        else:
-            # Si el texto no es muy largo, usar un solo embed
-            embed.add_field(
-                name="Recompensas por Nivel",
-                value=reward_text,
-                inline=False
-            )
-            
-            embed.add_field(
-                name="Consejos",
-                value="• **Mantente activo** para ganar XP más rápido\n"
-                      "• **Completa reseñas** para obtener bonificaciones\n"
-                      "• **Participa en eventos** para multiplicadores especiales\n"
-                      "• **Los beneficios se acumulan** - cada nivel anterior se mantiene",
-                inline=False
-            )
-            
-            if guild.icon:
-                embed.set_thumbnail(url=guild.icon.url)
-            
-            embed.set_footer(
-                text=f"Sistema de niveles de {guild.name} • ¡Comienza tu aventura hacia el nivel 200!",
-                icon_url=guild.icon.url if guild.icon else None
-            )
-            
-            await channel.send(embed=embed)
+        embed.add_field(
+            name="Consejos",
+            value="• **Mantente activo** para ganar XP más rápido\n"
+                  "• **Completa reseñas** para obtener bonificaciones\n"
+                  "• **Participa en eventos** para multiplicadores especiales\n"
+                  "• **Los beneficios se acumulan** - cada nivel anterior se mantiene",
+            inline=False
+        )
+        
+        if guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+        
+        embed.set_footer(
+            text=f"Sistema de niveles de {guild.name} • ¡Comienza tu aventura hacia el nivel 200!",
+            icon_url=guild.icon.url if guild.icon else None
+        )
+        
+        await channel.send(embed=embed)
 
     @commands.command(name="help_embeds")
     @commands.has_permissions(administrator=True)
