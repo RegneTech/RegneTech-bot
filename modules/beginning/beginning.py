@@ -9,9 +9,98 @@ class Verify(commands.Cog):
         self.RULES_CHANNEL_ID = 1400106792821981246
         self.FUNCIONAMIENTO_CHANNEL_ID = 1400106793551663187
         self.AUTOROLES_CHANNEL_ID = 1403015632844488839
+        self.REWARDS_CHANNEL_ID = 1406413774147158086  # Canal de recompensas
         self.VERIFIED_ROLE_ID = 1400106792196898888
         self.RESENADOR_ROLE_ID = 1400106792196898891
         self.BUMPEADOR_ROLE_ID = 1400106792196898892
+        
+        # Diccionario de roles por nivel (ordenado de mayor a menor para mostrar correctamente)
+        self.LEVEL_ROLES = {
+            200: 1400106792280658067,  # Rol Nivel 200 (Máximo)
+            190: 1400106792280658066,  # Rol Nivel 190
+            180: 1400106792280658065,  # Rol Nivel 180
+            170: 1400106792280658064,  # Rol Nivel 170
+            160: 1400106792280658063,  # Rol Nivel 160
+            150: 1400106792280658062,  # Rol Nivel 150
+            140: 1400106792280658061,  # Rol Nivel 140
+            130: 1400106792226127923,  # Rol Nivel 130
+            120: 1400106792226127922,  # Rol Nivel 120
+            110: 1400106792226127921,  # Rol Nivel 110
+            100: 1400106792226127920,  # Rol Nivel 100
+            90: 1400106792226127919,   # Rol Nivel 90
+            80: 1400106792226127918,   # Rol Nivel 80
+            70: 1400106792226127917,   # Rol Nivel 70
+            60: 1400106792226127916,   # Rol Nivel 60
+            50: 1400106792226127915,   # Rol Nivel 50
+            40: 1400106792226127914,   # Rol Nivel 40
+            30: 1400106792196898895,   # Rol Nivel 30
+            20: 1400106792196898894,   # Rol Nivel 20
+            10: 1400106792196898893,   # Rol Nivel 10
+        }
+        
+        # Recompensas por nivel (en orden inverso como pediste)
+        self.LEVEL_REWARDS = {
+            200: [
+                "Beneficio acumulado de todos los anteriores + diseño de perfil único que nadie más puede tener."
+            ],
+            190: [
+                "Acceso a \"misiones legendarias\" con premios exclusivos."
+            ],
+            180: [
+                "Multiplicador de recompensas en torneos y eventos (+50%)."
+            ],
+            170: [
+                "Acceso a encuestas exclusivas de decisiones del servidor."
+            ],
+            160: [
+                "Acceso a canal de leaks/spoilers VIP."
+            ],
+            150: [
+                "x4 de XP durante 78h + logro exclusivo."
+            ],
+            140: [
+                "x2 de suerte en eventos y similares."
+            ],
+            130: [
+                "Perfil único personalizado que usarás tú y estará en la tienda."
+            ],
+            120: [
+                "Ganar más de 1€ por reseña."
+            ],
+            110: [
+                "Rol exclusivo y acceso a misiones."
+            ],
+            100: [
+                "Comprar diseños de perfil en la tienda."
+            ],
+            90: [
+                "Acceso a sorteos gratis y torneos."
+            ],
+            80: [
+                "x3 de XP durante 78h + logro exclusivo."
+            ],
+            70: [
+                "Acceso a canal privado + añadir emojis."
+            ],
+            60: [
+                "Diseño de perfil exclusivo + gama de colores."
+            ],
+            50: [
+                "x2 de XP durante 78h + logro exclusivo."
+            ],
+            40: [
+                "Permisos para gifs e imágenes dentro del servidor."
+            ],
+            30: [
+                "Desbloquea gama de colores para personalizar perfil."
+            ],
+            20: [
+                "Sube precio inicial de 0.3 a 0.5 en reseñas."
+            ],
+            10: [
+                "Cambiar color del nombre y cambiar apodo."
+            ]
+        }
 
     async def cog_load(self):
         """Se ejecuta cuando el cog es cargado"""
@@ -70,6 +159,133 @@ class Verify(commands.Cog):
         except Exception:
             return 0
 
+    @commands.command(name="rewards_setup")
+    @commands.has_permissions(administrator=True)
+    async def rewards_setup(self, ctx):
+        """Configura el sistema de recompensas por niveles"""
+        try:
+            await self.setup_rewards(ctx.guild)
+            await ctx.send(f"✅ Sistema de recompensas configurado en <#{self.REWARDS_CHANNEL_ID}>")
+        except Exception as e:
+            await ctx.send(f"❌ Error al configurar recompensas: {str(e)}")
+
+    async def setup_rewards(self, guild):
+        """Configura las recompensas por niveles"""
+        channel = self.bot.get_channel(self.REWARDS_CHANNEL_ID)
+        if not channel:
+            raise Exception("Canal de recompensas no encontrado")
+        
+        # Limpiar canal
+        await self.clear_channel(channel)
+        
+        # Embed principal
+        embed = discord.Embed(
+            title="Sistema de Recompensas por Niveles",
+            description="¡Alcanza nuevos niveles y desbloquea increíbles recompensas! Cada nivel te otorga beneficios únicos y exclusivos.\n\n"
+                       "**¿Cómo subir de nivel?**\n"
+                       "• Participando activamente en el servidor\n"
+                       "• Completando reseñas y tareas\n"
+                       "• Interactuando en los canales\n\n"
+                       "**Progresa y desbloquea todos estos increíbles beneficios:**",
+            color=0xFFD700  # Color dorado para las recompensas
+        )
+        
+        # Agregar recompensas por nivel (ya están en orden descendente)
+        reward_text = ""
+        for level in sorted(self.LEVEL_ROLES.keys(), reverse=True):
+            role_id = self.LEVEL_ROLES[level]
+            rewards = self.LEVEL_REWARDS.get(level, ["Sin recompensas definidas"])
+            
+            reward_text += f"\n**NIVEL {level}** <@&{role_id}>\n"
+            for reward in rewards:
+                reward_text += f"• {reward}\n"
+        
+        # Dividir el texto si es muy largo (Discord tiene límite de caracteres)
+        if len(reward_text) > 1024:
+            # Crear múltiples embeds si es necesario
+            embed.add_field(
+                name="Recompensas Disponibles",
+                value="*Lista completa de recompensas por nivel:*",
+                inline=False
+            )
+            
+            # Enviar el embed principal primero
+            await channel.send(embed=embed)
+            
+            # Crear embeds adicionales para las recompensas
+            current_text = ""
+            embed_count = 1
+            
+            for level in sorted(self.LEVEL_ROLES.keys(), reverse=True):
+                role_id = self.LEVEL_ROLES[level]
+                rewards = self.LEVEL_REWARDS.get(level, ["Sin recompensas definidas"])
+                
+                level_text = f"\n**NIVEL {level}** <@&{role_id}>\n"
+                for reward in rewards:
+                    level_text += f"• {reward}\n"
+                
+                # Si agregar este nivel excede el límite, crear un nuevo embed
+                if len(current_text + level_text) > 1000:
+                    reward_embed = discord.Embed(
+                        title=f"Recompensas por Niveles - Parte {embed_count}",
+                        description=current_text,
+                        color=0xFFD700
+                    )
+                    
+                    if guild.icon:
+                        reward_embed.set_thumbnail(url=guild.icon.url)
+                    
+                    await channel.send(embed=reward_embed)
+                    current_text = level_text
+                    embed_count += 1
+                else:
+                    current_text += level_text
+            
+            # Enviar el último embed si queda contenido
+            if current_text:
+                final_embed = discord.Embed(
+                    title=f"Recompensas por Niveles - Parte {embed_count}",
+                    description=current_text,
+                    color=0xFFD700
+                )
+                
+                if guild.icon:
+                    final_embed.set_thumbnail(url=guild.icon.url)
+                
+                final_embed.set_footer(
+                    text=f"Sistema de niveles de {guild.name} • ¡Sigue participando para desbloquear más recompensas!",
+                    icon_url=guild.icon.url if guild.icon else None
+                )
+                
+                await channel.send(embed=final_embed)
+        
+        else:
+            # Si el texto no es muy largo, usar un solo embed
+            embed.add_field(
+                name="Recompensas por Nivel",
+                value=reward_text,
+                inline=False
+            )
+            
+            embed.add_field(
+                name="Consejos",
+                value="• **Mantente activo** para ganar XP más rápido\n"
+                      "• **Completa reseñas** para obtener bonificaciones\n"
+                      "• **Participa en eventos** para multiplicadores especiales\n"
+                      "• **Los beneficios se acumulan** - cada nivel anterior se mantiene",
+                inline=False
+            )
+            
+            if guild.icon:
+                embed.set_thumbnail(url=guild.icon.url)
+            
+            embed.set_footer(
+                text=f"Sistema de niveles de {guild.name} • ¡Comienza tu aventura hacia el nivel 200!",
+                icon_url=guild.icon.url if guild.icon else None
+            )
+            
+            await channel.send(embed=embed)
+
     @commands.command(name="help_embeds")
     @commands.has_permissions(administrator=True)
     async def help_embeds(self, ctx):
@@ -85,7 +301,8 @@ class Verify(commands.Cog):
             value="• `!verify_setup` - Configura solo el sistema de verificación\n"
                   "• `!rules_setup` - Envía solo las reglas del servidor\n"
                   "• `!funcionamiento_setup` - Configura solo el funcionamiento de la tienda\n"
-                  "• `!autoroles_setup` - Configura solo el sistema de autoroles",
+                  "• `!autoroles_setup` - Configura solo el sistema de autoroles\n"
+                  "• `!rewards_setup` - Configura solo el sistema de recompensas",
             inline=False
         )
         
@@ -109,7 +326,8 @@ class Verify(commands.Cog):
             value=f"• Verificación: <#{self.VERIFICATION_CHANNEL_ID}>\n"
                   f"• Reglas: <#{self.RULES_CHANNEL_ID}>\n"
                   f"• Funcionamiento: <#{self.FUNCIONAMIENTO_CHANNEL_ID}>\n"
-                  f"• Autoroles: <#{self.AUTOROLES_CHANNEL_ID}>",
+                  f"• Autoroles: <#{self.AUTOROLES_CHANNEL_ID}>\n"
+                  f"• Recompensas: <#{self.REWARDS_CHANNEL_ID}>",
             inline=False
         )
         
@@ -158,6 +376,13 @@ class Verify(commands.Cog):
             results.append("✅ Sistema de autoroles configurado")
         except Exception as e:
             results.append(f"❌ Error en autoroles: {str(e)[:50]}")
+        
+        # Configurar recompensas
+        try:
+            await self.setup_rewards(ctx.guild)
+            results.append("✅ Sistema de recompensas configurado")
+        except Exception as e:
+            results.append(f"❌ Error en recompensas: {str(e)[:50]}")
         
         # Crear embed de resultados
         embed = discord.Embed(
@@ -297,11 +522,11 @@ class Verify(commands.Cog):
         
         embed.add_field(
             name="🎁 ¿Qué puedes comprar?",
-            value="・**🎟️ Accesos a eventos especiales** Participa en dinámicas únicas desbloqueando objetos de entrada o participación.\n"
-                  "・**💸 Retiros de dinero real** Canjea tu saldo acumulado por dinero real si cumples con los requisitos.\n"
-                  "・**🧰 Ítems de uso personal** Cuentas premium como HBO, Spotify, Crunchyroll, entre otras. Solo tú podrás usarlas.\n"
-                  "・**🎨 Cosméticos de perfil** Personaliza tu cuenta con marcos, insignias, colores, íconos y estilos únicos.\n"
-                  "・**⏳ Objetos limitados** Artículos disponibles solo por tiempo limitado o en eventos específicos.",
+            value="• **🎟️ Accesos a eventos especiales** Participa en dinámicas únicas desbloqueando objetos de entrada o participación.\n"
+                  "• **💸 Retiros de dinero real** Canjea tu saldo acumulado por dinero real si cumples con los requisitos.\n"
+                  "• **🧰 Ítems de uso personal** Cuentas premium como HBO, Spotify, Crunchyroll, entre otras. Solo tú podrás usarlas.\n"
+                  "• **🎨 Cosméticos de perfil** Personaliza tu cuenta con marcos, insignias, colores, íconos y estilos únicos.\n"
+                  "• **⏳ Objetos limitados** Artículos disponibles solo por tiempo limitado o en eventos específicos.",
             inline=False
         )
         
