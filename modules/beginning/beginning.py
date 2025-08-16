@@ -13,10 +13,12 @@ class Verify(commands.Cog):
         self.RESENADOR_ROLE_ID = 1400106792196898891
         self.BUMPEADOR_ROLE_ID = 1400106792196898892
 
-    @commands.Cog.listener()
-    async def on_ready(self):
-        """Se ejecuta cuando el bot está listo y configurado"""
-        print(f"Bot {self.bot.user} está listo. Configurando sistemas automáticamente...")
+    async def cog_load(self):
+        """Se ejecuta cuando el cog es cargado"""
+        print("🔧 Configurando sistemas automáticamente al cargar el cog...")
+        
+        # Pequeño delay para asegurar que el bot esté completamente listo
+        await self.bot.wait_until_ready()
         
         # Configurar verificación automáticamente
         try:
@@ -28,13 +30,35 @@ class Verify(commands.Cog):
         # Configurar autoroles automáticamente
         try:
             # Necesitamos obtener el guild para setup_autoroles
-            # Asumimos que el bot está principalmente en un servidor, pero puedes modificar esto
             for guild in self.bot.guilds:
                 await self.setup_autoroles(guild)
                 print(f"✅ Sistema de autoroles configurado automáticamente en {guild.name}")
                 break  # Solo configura en el primer servidor, modifica si necesitas más
         except Exception as e:
             print(f"❌ Error al configurar autoroles automáticamente: {str(e)}")
+
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Backup listener en caso de que cog_load no funcione"""
+        if not hasattr(self, '_auto_setup_done'):
+            self._auto_setup_done = True
+            print("🔧 Ejecutando configuración automática desde on_ready...")
+            
+            # Configurar verificación automáticamente
+            try:
+                await self.setup_verification()
+                print("✅ Sistema de verificación configurado automáticamente (on_ready)")
+            except Exception as e:
+                print(f"❌ Error al configurar verificación automáticamente: {str(e)}")
+            
+            # Configurar autoroles automáticamente
+            try:
+                for guild in self.bot.guilds:
+                    await self.setup_autoroles(guild)
+                    print(f"✅ Sistema de autoroles configurado automáticamente en {guild.name} (on_ready)")
+                    break
+            except Exception as e:
+                print(f"❌ Error al configurar autoroles automáticamente: {str(e)}")
 
     async def clear_channel(self, channel):
         """Limpia todos los mensajes del canal"""
@@ -385,6 +409,42 @@ class Verify(commands.Cog):
             await ctx.send(f"✅ Autoroles configurados en <#{self.AUTOROLES_CHANNEL_ID}>")
         except Exception as e:
             await ctx.send(f"❌ Error al configurar autoroles: {str(e)}")
+
+    @commands.command(name="force_autosetup")
+    @commands.has_permissions(administrator=True)
+    async def force_autosetup(self, ctx):
+        """Fuerza la configuración automática de verificación y autoroles"""
+        loading_msg = await ctx.send("🔄 Forzando configuración automática...")
+        
+        results = []
+        
+        # Configurar verificación
+        try:
+            await self.setup_verification()
+            results.append("✅ Sistema de verificación configurado")
+        except Exception as e:
+            results.append(f"❌ Error en verificación: {str(e)[:50]}")
+        
+        # Configurar autoroles
+        try:
+            await self.setup_autoroles(ctx.guild)
+            results.append("✅ Sistema de autoroles configurado")
+        except Exception as e:
+            results.append(f"❌ Error en autoroles: {str(e)[:50]}")
+        
+        embed = discord.Embed(
+            title="🚀 Configuración Automática Forzada",
+            description="Resultado de la configuración automática:",
+            color=0x3498db
+        )
+        
+        embed.add_field(
+            name="📊 Resultados",
+            value="\n".join(results),
+            inline=False
+        )
+        
+        await loading_msg.edit(content="", embed=embed)
 
 class AutoRolesView(discord.ui.View):
     def __init__(self, resenador_role_id, bumpeador_role_id):
