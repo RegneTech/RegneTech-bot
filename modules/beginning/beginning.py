@@ -13,6 +13,29 @@ class Verify(commands.Cog):
         self.RESENADOR_ROLE_ID = 1400106792196898891
         self.BUMPEADOR_ROLE_ID = 1400106792196898892
 
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Se ejecuta cuando el bot está listo y configurado"""
+        print(f"Bot {self.bot.user} está listo. Configurando sistemas automáticamente...")
+        
+        # Configurar verificación automáticamente
+        try:
+            await self.setup_verification()
+            print("✅ Sistema de verificación configurado automáticamente")
+        except Exception as e:
+            print(f"❌ Error al configurar verificación automáticamente: {str(e)}")
+        
+        # Configurar autoroles automáticamente
+        try:
+            # Necesitamos obtener el guild para setup_autoroles
+            # Asumimos que el bot está principalmente en un servidor, pero puedes modificar esto
+            for guild in self.bot.guilds:
+                await self.setup_autoroles(guild)
+                print(f"✅ Sistema de autoroles configurado automáticamente en {guild.name}")
+                break  # Solo configura en el primer servidor, modifica si necesitas más
+        except Exception as e:
+            print(f"❌ Error al configurar autoroles automáticamente: {str(e)}")
+
     async def clear_channel(self, channel):
         """Limpia todos los mensajes del canal"""
         try:
@@ -52,7 +75,8 @@ class Verify(commands.Cog):
         embed.add_field(
             name="ℹ️ Información",
             value="• `!help_embeds` - Muestra esta ayuda\n\n"
-                  "**Nota:** Todos los comandos requieren permisos de administrador.",
+                  "**Nota:** Todos los comandos requieren permisos de administrador.\n"
+                  "**Auto-Setup:** Los sistemas de verificación y autoroles se configuran automáticamente al iniciar el bot.",
             inline=False
         )
         
@@ -139,7 +163,7 @@ class Verify(commands.Cog):
         
         # Crear embed
         embed = discord.Embed(
-            title="🔐 Verificación del Servidor",
+            title="🔒 Verificación del Servidor",
             description="¡Bienvenido a nuestro servidor!\n\n"
                        "Para acceder a todos los canales y participar en la comunidad, "
                        "necesitas verificarte primero.\n\n"
