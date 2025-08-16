@@ -242,9 +242,7 @@ class Verify(commands.Cog):
         tips_embed = discord.Embed(
             title="Consejos para Progresar",
             description="• **Mantente activo** para ganar XP más rápido\n"
-                       "• **Completa reseñas** para obtener bonificaciones\n"
-                       "• **Participa en eventos** para multiplicadores especiales\n"
-                       "• **Los beneficios se acumulan** - cada nivel anterior se mantiene\n\n"
+                       "• **Participa en eventos** para multiplicadores especiales\n\n"
                        "**¡Recuerda que todos los beneficios de niveles anteriores se mantienen cuando subes de nivel!**",
             color=0x00FF00
         )
