@@ -190,29 +190,9 @@ class Verify(commands.Cog):
             color=0xFFD700  # Color dorado para las recompensas
         )
         
-        # Agregar recompensas por nivel (de menor a mayor)
-        reward_text = ""
-        for level in sorted(self.LEVEL_ROLES.keys()):  # Sin reverse=True para orden ascendente
-            role_id = self.LEVEL_ROLES[level]
-            rewards = self.LEVEL_REWARDS.get(level, ["Sin recompensas definidas"])
-            
-            reward_text += f"\n**NIVEL {level}** <@&{role_id}>\n"
-            for reward in rewards:
-                reward_text += f"• {reward}\n"
-        
-        # Usar un solo embed sin dividir
         embed.add_field(
-            name="Recompensas por Nivel",
-            value=reward_text,
-            inline=False
-        )
-        
-        embed.add_field(
-            name="Consejos",
-            value="• **Mantente activo** para ganar XP más rápido\n"
-                  "• **Completa reseñas** para obtener bonificaciones\n"
-                  "• **Participa en eventos** para multiplicadores especiales\n"
-                  "• **Los beneficios se acumulan** - cada nivel anterior se mantiene",
+            name="Información",
+            value="A continuación encontrarás todos los niveles y sus recompensas, desde el nivel 10 hasta el máximo nivel 200. ¡Los beneficios se acumulan!",
             inline=False
         )
         
@@ -220,24 +200,77 @@ class Verify(commands.Cog):
             embed.set_thumbnail(url=guild.icon.url)
         
         embed.set_footer(
-            text=f"Sistema de niveles de {guild.name} • ¡Comienza tu aventura hacia el nivel 200!",
+            text=f"Sistema de niveles de {guild.name} • ¡Comienza tu aventura!",
             icon_url=guild.icon.url if guild.icon else None
         )
         
+        # Enviar el embed principal
         await channel.send(embed=embed)
+        
+        # Crear embeds para las recompensas (divididos por niveles)
+        levels_sorted = sorted(self.LEVEL_ROLES.keys())
+        
+        # Dividir los niveles en grupos para crear múltiples embeds
+        levels_per_embed = 5  # 5 niveles por embed para que quede limpio
+        
+        for i in range(0, len(levels_sorted), levels_per_embed):
+            levels_batch = levels_sorted[i:i + levels_per_embed]
+            
+            reward_text = ""
+            for level in levels_batch:
+                role_id = self.LEVEL_ROLES[level]
+                rewards = self.LEVEL_REWARDS.get(level, ["Sin recompensas definidas"])
+                
+                reward_text += f"**NIVEL {level}** <@&{role_id}>\n"
+                for reward in rewards:
+                    reward_text += f"• {reward}\n"
+                reward_text += "\n"
+            
+            # Crear embed para este grupo de niveles
+            levels_embed = discord.Embed(
+                title=f"Niveles {levels_batch[0]} - {levels_batch[-1]}",
+                description=reward_text,
+                color=0xFFD700
+            )
+            
+            if guild.icon:
+                levels_embed.set_thumbnail(url=guild.icon.url)
+            
+            await channel.send(embed=levels_embed)
+        
+        # Embed final con consejos
+        tips_embed = discord.Embed(
+            title="Consejos para Progresar",
+            description="• **Mantente activo** para ganar XP más rápido\n"
+                       "• **Completa reseñas** para obtener bonificaciones\n"
+                       "• **Participa en eventos** para multiplicadores especiales\n"
+                       "• **Los beneficios se acumulan** - cada nivel anterior se mantiene\n\n"
+                       "**¡Recuerda que todos los beneficios de niveles anteriores se mantienen cuando subes de nivel!**",
+            color=0x00FF00
+        )
+        
+        if guild.icon:
+            tips_embed.set_thumbnail(url=guild.icon.url)
+        
+        tips_embed.set_footer(
+            text=f"¡Alcanza el nivel 200 y desbloquea todos los beneficios! - {guild.name}",
+            icon_url=guild.icon.url if guild.icon else None
+        )
+        
+        await channel.send(embed=tips_embed)
 
     @commands.command(name="help_embeds")
     @commands.has_permissions(administrator=True)
     async def help_embeds(self, ctx):
         """Muestra todos los comandos disponibles del sistema"""
         embed = discord.Embed(
-            title="🛠️ Sistema de Setup - Comandos Disponibles",
+            title="Sistema de Setup - Comandos Disponibles",
             description="Lista de todos los comandos disponibles para configurar el servidor:",
             color=0x3498db
         )
         
         embed.add_field(
-            name="🔧 Comandos Individuales",
+            name="Comandos Individuales",
             value="• `!verify_setup` - Configura solo el sistema de verificación\n"
                   "• `!rules_setup` - Envía solo las reglas del servidor\n"
                   "• `!funcionamiento_setup` - Configura solo el funcionamiento de la tienda\n"
@@ -247,14 +280,14 @@ class Verify(commands.Cog):
         )
         
         embed.add_field(
-            name="🚀 Comando Unificado",
+            name="Comando Unificado",
             value="• `!setup_all` - Configura TODOS los sistemas de una vez\n"
                   "  *(Limpia los canales y configura todo automáticamente)*",
             inline=False
         )
         
         embed.add_field(
-            name="ℹ️ Información",
+            name="Información",
             value="• `!help_embeds` - Muestra esta ayuda\n\n"
                   "**Nota:** Todos los comandos requieren permisos de administrador.\n"
                   "**Auto-Setup:** Los sistemas de verificación y autoroles se configuran automáticamente al iniciar el bot.",
@@ -262,7 +295,7 @@ class Verify(commands.Cog):
         )
         
         embed.add_field(
-            name="📋 Canales Configurados",
+            name="Canales Configurados",
             value=f"• Verificación: <#{self.VERIFICATION_CHANNEL_ID}>\n"
                   f"• Reglas: <#{self.RULES_CHANNEL_ID}>\n"
                   f"• Funcionamiento: <#{self.FUNCIONAMIENTO_CHANNEL_ID}>\n"
@@ -326,13 +359,13 @@ class Verify(commands.Cog):
         
         # Crear embed de resultados
         embed = discord.Embed(
-            title="🎉 Configuración Completa",
+            title="Configuración Completa",
             description="Resultado de la configuración de todos los sistemas:",
             color=0x00ff00
         )
         
         embed.add_field(
-            name="📊 Resultados",
+            name="Resultados",
             value="\n".join(results),
             inline=False
         )
@@ -352,7 +385,7 @@ class Verify(commands.Cog):
         
         # Crear embed
         embed = discord.Embed(
-            title="🔒 Verificación del Servidor",
+            title="Verificación del Servidor",
             description="¡Bienvenido a nuestro servidor!\n\n"
                        "Para acceder a todos los canales y participar en la comunidad, "
                        "necesitas verificarte primero.\n\n"
@@ -364,7 +397,7 @@ class Verify(commands.Cog):
             embed.set_thumbnail(url=channel.guild.icon.url)
         
         embed.add_field(
-            name="📋 ¿Por qué verificarse?", 
+            name="¿Por qué verificarse?", 
             value="• Acceso completo al servidor\n• Participar en conversaciones\n• Unirte a eventos y actividades", 
             inline=False
         )
@@ -387,49 +420,49 @@ class Verify(commands.Cog):
         await self.clear_channel(channel)
         
         embed = discord.Embed(
-            title="📜 Reglas del Servidor",
+            title="Reglas del Servidor",
             description="¡Bienvenido/a! Este servidor te permite **ganar dinero, comprar productos y disfrutar de múltiples beneficios**. Para mantener un entorno seguro, justo y divertido para todos, es esencial respetar las siguientes normas:",
             color=0xe74c3c
         )
         
         embed.add_field(
-            name="1. 🤝 Respeto ante todo",
+            name="1. Respeto ante todo",
             value="No se permite acoso, insultos, discriminación ni conductas tóxicas. Mantén un ambiente cordial y sano.",
             inline=False
         )
         
         embed.add_field(
-            name="2. 🚫 Estafas terminantemente prohibidas",
+            name="2. Estafas terminantemente prohibidas",
             value="Cualquier intento de engañar, estafar o romper acuerdos será sancionado sin excepción.",
             inline=False
         )
         
         embed.add_field(
-            name="3. 💼 Comercio con responsabilidad",
+            name="3. Comercio con responsabilidad",
             value="Utiliza únicamente los canales habilitados para comprar o vender. Todo producto ofrecido debe ser legítimo. El servidor **no se hace responsable** por tratos fuera de los canales oficiales.",
             inline=False
         )
         
         embed.add_field(
-            name="4. 💸 Sistema económico",
+            name="4. Sistema económico",
             value="No está permitido abusar del sistema, explotar errores o buscar ventajas injustas. Las recompensas pueden cambiar sin previo aviso según las decisiones del staff.",
             inline=False
         )
         
         embed.add_field(
-            name="5. 📢 Sin spam ni publicidad externa",
+            name="5. Sin spam ni publicidad externa",
             value="Está prohibido hacer spam, flood o promocionar servidores/productos sin autorización previa.",
             inline=False
         )
         
         embed.add_field(
-            name="6. 🧠 Sentido común y respeto al staff",
+            name="6. Sentido común y respeto al staff",
             value="No suplantes al staff ni desafíes su autoridad. Ante dudas o problemas, repórtalo por los canales correspondientes.",
             inline=False
         )
         
         embed.add_field(
-            name="🚨 Importante",
+            name="Importante",
             value="El incumplimiento de estas normas puede resultar en **sanciones graves o permanentes**.\nAl permanecer en este servidor, **aceptas estas reglas**.",
             inline=False
         )
@@ -454,24 +487,24 @@ class Verify(commands.Cog):
         await self.clear_channel(channel)
         
         embed = discord.Embed(
-            title="🛒 Funcionamiento de la Tienda",
+            title="Funcionamiento de la Tienda",
             description="**Canal oficial:** <#1400106793551663189>\n\n"
                        "La tienda es el lugar donde puedes gastar el dinero que ganes dentro del servidor en objetos exclusivos, retiros, cuentas premium y más. A continuación, te explicamos cómo funciona:",
             color=0x3498db
         )
         
         embed.add_field(
-            name="🎁 ¿Qué puedes comprar?",
-            value="• **🎟️ Accesos a eventos especiales** Participa en dinámicas únicas desbloqueando objetos de entrada o participación.\n"
-                  "• **💸 Retiros de dinero real** Canjea tu saldo acumulado por dinero real si cumples con los requisitos.\n"
-                  "• **🧰 Ítems de uso personal** Cuentas premium como HBO, Spotify, Crunchyroll, entre otras. Solo tú podrás usarlas.\n"
-                  "• **🎨 Cosméticos de perfil** Personaliza tu cuenta con marcos, insignias, colores, íconos y estilos únicos.\n"
-                  "• **⏳ Objetos limitados** Artículos disponibles solo por tiempo limitado o en eventos específicos.",
+            name="¿Qué puedes comprar?",
+            value="• **Accesos a eventos especiales** Participa en dinámicas únicas desbloqueando objetos de entrada o participación.\n"
+                  "• **Retiros de dinero real** Canjea tu saldo acumulado por dinero real si cumples con los requisitos.\n"
+                  "• **Ítems de uso personal** Cuentas premium como HBO, Spotify, Crunchyroll, entre otras. Solo tú podrás usarlas.\n"
+                  "• **Cosméticos de perfil** Personaliza tu cuenta con marcos, insignias, colores, íconos y estilos únicos.\n"
+                  "• **Objetos limitados** Artículos disponibles solo por tiempo limitado o en eventos específicos.",
             inline=False
         )
         
         embed.add_field(
-            name="💰 ¿Cómo ganar dinero?",
+            name="¿Cómo ganar dinero?",
             value="Por ahora, la única forma de generar ingresos es a través de **reseñas**. **Canal:** <#1400106793551663190>\n\n"
                   "• Cuando estén disponibles, se anunciará allí mismo.\n"
                   "• Solo sigue las instrucciones y completa la reseña correctamente.\n"
@@ -480,7 +513,7 @@ class Verify(commands.Cog):
         )
         
         embed.add_field(
-            name="📌 Consejo",
+            name="Consejo",
             value=f"Ve a <#{self.AUTOROLES_CHANNEL_ID}> y ponte el rol <@&{self.RESENADOR_ROLE_ID}> para recibir notificaciones cada vez que una reseña esté disponible.",
             inline=False
         )
@@ -505,7 +538,7 @@ class Verify(commands.Cog):
         await self.clear_channel(channel)
         
         embed = discord.Embed(
-            title="🎭 Sistema de Autoroles",
+            title="Sistema de Autoroles",
             description="¡Personaliza tu experiencia en el servidor! Selecciona los roles que más te interesen para recibir notificaciones específicas y acceder a funciones exclusivas.\n\n"
                        "**Haz clic en los botones de abajo para obtener o quitar tus roles:**",
             color=0x7F8C8D
@@ -598,13 +631,13 @@ class Verify(commands.Cog):
             results.append(f"❌ Error en autoroles: {str(e)[:50]}")
         
         embed = discord.Embed(
-            title="🚀 Configuración Automática Forzada",
+            title="Configuración Automática Forzada",
             description="Resultado de la configuración automática:",
             color=0x3498db
         )
         
         embed.add_field(
-            name="📊 Resultados",
+            name="Resultados",
             value="\n".join(results),
             inline=False
         )
