@@ -313,6 +313,7 @@ class Perfil(commands.Cog):
         return background
     
     @commands.command(name="perfil", aliases=["profile", "p"])
+    @commands.has_permissions(manage_guild=True)
     @commands.cooldown(1, 30, commands.BucketType.user)
     async def perfil(self, ctx, member: discord.Member = None):
         """Muestra el perfil de un usuario con imagen personalizada"""
