@@ -651,6 +651,132 @@ async def get_invites_stats(guild_id: int) -> dict:
         }
 
 # ==========================================
+# FUNCIONES PARA EL SISTEMA DE PARTNERS
+# ==========================================
+
+async def init_partner_tables():
+    """Inicializa las tablas del sistema de partners"""
+    async with pool.acquire() as conn:
+        # Tabla para partners
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS partners (
+            id SERIAL PRIMARY KEY,
+            author_id BIGINT NOT NULL,
+            author_name TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """)
+        
+        # Tabla para configuración del contador
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS partner_config (
+            key TEXT PRIMARY KEY,
+            value INTEGER
+        );
+        """)
+        
+        # Inicializar contador si no existe
+        await conn.execute("""
+        INSERT INTO partner_config (key, value) 
+        VALUES ('partner_count', 0) 
+        ON CONFLICT (key) DO NOTHING;
+        """)
+
+async def get_next_partner_number() -> int:
+    """Obtiene el siguiente número de partner"""
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Obtener contador actual
+            result = await conn.fetchrow('SELECT value FROM partner_config WHERE key = $1', 'partner_count')
+            current = result['value'] if result else 0
+            new_count = current + 1
+            
+            # Actualizar contador
+            await conn.execute(
+                'UPDATE partner_config SET value = $1 WHERE key = $2', 
+                new_count, 'partner_count'
+            )
+            
+            return new_count
+
+async def save_partner(author_id: int, author_name: str, content: str) -> bool:
+    """Guarda el partner en la base de datos"""
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO partners (author_id, author_name, content)
+                VALUES ($1, $2, $3)
+            """, author_id, author_name, content)
+            return True
+    except Exception as e:
+        print(f"Error guardando partner: {e}")
+        return False
+
+async def get_partner_stats() -> dict:
+    """Obtiene estadísticas de partners"""
+    async with pool.acquire() as conn:
+        # Total de partners
+        result = await conn.fetchrow('SELECT COUNT(*) as total FROM partners')
+        total = result['total'] if result else 0
+        
+        # Partners por usuario (top 5)
+        results = await conn.fetch("""
+            SELECT author_name, COUNT(*) as count 
+            FROM partners 
+            GROUP BY author_name, author_id 
+            ORDER BY count DESC 
+            LIMIT 5
+        """)
+        
+        top_users = [(row['author_name'], row['count']) for row in results]
+        
+        return {
+            'total': total,
+            'top_users': top_users
+        }
+
+async def get_partners_list(limit: int = 5) -> list:
+    """Lista los últimos partners"""
+    async with pool.acquire() as conn:
+        results = await conn.fetch("""
+            SELECT id, author_name, content, created_at 
+            FROM partners 
+            ORDER BY created_at DESC 
+            LIMIT $1
+        """, limit)
+        
+        return [(row['id'], row['author_name'], row['content'], row['created_at']) for row in results]
+
+async def delete_partner(partner_id: int) -> bool:
+    """Elimina un partner por ID"""
+    try:
+        async with pool.acquire() as conn:
+            # Verificar que existe
+            result = await conn.fetchrow('SELECT id FROM partners WHERE id = $1', partner_id)
+            if not result:
+                return False
+            
+            # Eliminar
+            await conn.execute('DELETE FROM partners WHERE id = $1', partner_id)
+            return True
+    except Exception as e:
+        print(f"Error eliminando partner: {e}")
+        return False
+
+async def get_partner_by_id(partner_id: int) -> tuple:
+    """Obtiene un partner específico por ID"""
+    async with pool.acquire() as conn:
+        result = await conn.fetchrow("""
+            SELECT id, author_name, content, created_at 
+            FROM partners WHERE id = $1
+        """, partner_id)
+        
+        if result:
+            return (result['id'], result['author_name'], result['content'], result['created_at'])
+        return None
+
+# ==========================================
 # FUNCIONES PARA EL SISTEMA DE NIVELES
 # ==========================================
 

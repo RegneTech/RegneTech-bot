@@ -36,7 +36,8 @@ MODULES = [
     "modules.beginning.beginning",
     "modules.economia.sorteos",
     "modules.user.user",
-    "modules.user.perfil"
+    "modules.user.perfil",
+    "modules.admin.partner"
 ]
 
 # Cargar módulos automáticamente (ASYNC)
