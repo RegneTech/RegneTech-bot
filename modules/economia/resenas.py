@@ -229,6 +229,16 @@ class ReseñasBotones(discord.ui.View):
             await interaction.response.send_message(embed=embed_error, ephemeral=True)
             return
 
+        # Evitar que se reclame dos veces
+        if self.reclamado_por:
+            embed_error = discord.Embed(
+                title="⚠️ Ya reclamado",
+                description="Esta reseña ya fue reclamada por otro miembro del staff.",
+                color=0xff9900
+            )
+            await interaction.response.send_message(embed=embed_error, ephemeral=True)
+            return
+
         # Actualizar botón
         button.label = f"Reclamado por {interaction.user.display_name}"
         button.disabled = True
@@ -237,27 +247,36 @@ class ReseñasBotones(discord.ui.View):
         # Guardar quien reclamó
         self.reclamado_por = interaction.user.id
         
+        # Obtener usuario que solicitó la reseña
+        usuario_solicitante = interaction.guild.get_member(self.usuario_id)
+
         # Crear embed de reclamo
         embed = discord.Embed(
             title="👋 Reseña Reclamada",
-            description=f"**{interaction.user.display_name}** se ha hecho cargo de esta reseña.\n\n"
-                       f"🔹 **Staff asignado:** {interaction.user.mention}\n"
-                       f"🔹 **Precio actual:** **{self.precio_actual:.2f}€**\n"
-                       f"🔹 **Tiempo:** {datetime.datetime.now().strftime('%d/%m/%Y a las %H:%M')}",
+            description=(
+                f"🔹 **Usuario solicitante:** {usuario_solicitante.mention if usuario_solicitante else 'Desconocido'}\n"
+                f"🔹 **Staff asignado:** {interaction.user.mention}\n\n"
+                f"💰 **Precio actual:** **{self.precio_actual:.2f}€**\n"
+                f"⏰ **Tiempo:** {datetime.datetime.now().strftime('%d/%m/%Y a las %H:%M')}"
+            ),
             color=0xffaa00,
             timestamp=datetime.datetime.now()
         )
         embed.set_thumbnail(url=interaction.user.display_avatar.url)
+        embed.set_footer(text=f"Reclamado por {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
         
-        # Primero actualizar el mensaje original con el botón modificado
+        # Primero actualizar el mensaje original
         await interaction.response.edit_message(view=self)
         
-        # Enviar el embed de reclamo
+        # Enviar embed al canal
         await interaction.followup.send(embed=embed)
         
-        # Enviar mensaje adicional sin embed
-        mensaje_adicional = f"{interaction.user.mention}, un miembro del equipo ya está aquí.\n{interaction.user.mention} se encargará de ayudarte con tu reseña."
-        await interaction.followup.send(mensaje_adicional)
+        # Aviso directo al solicitante
+        if usuario_solicitante:
+            mensaje_adicional = (
+                f"{usuario_solicitante.mention}, tu reseña será atendida por {interaction.user.mention}."
+            )
+            await interaction.followup.send(mensaje_adicional)
 
     @discord.ui.button(label="Terminar", style=discord.ButtonStyle.danger, emoji="🔒")
     async def terminar_resena(self, interaction: discord.Interaction, button: discord.ui.Button):
