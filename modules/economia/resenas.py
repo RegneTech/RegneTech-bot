@@ -4,26 +4,126 @@ from discord import app_commands
 from datetime import timedelta
 import datetime
 from typing import Dict, Set, Optional, List
+from decimal import Decimal
 import database
 
-class ConfirmarTerminar(discord.ui.View):
+class MontoModal(discord.ui.Modal):
     def __init__(self, canal_id: int, usuario_id: int, precio_total: float):
+        super().__init__(title="💰 Ingresar Monto de Pago")
+        self.canal_id = canal_id
+        self.usuario_id = usuario_id
+        self.precio_total = precio_total
+        
+        self.monto_input = discord.ui.TextInput(
+            label="Monto a pagar (en €)",
+            placeholder="Ejemplo: 0.80 o 1.50",
+            required=True,
+            max_length=10
+        )
+        self.add_item(self.monto_input)
+    
+    async def on_submit(self, interaction: discord.Interaction):
+        try:
+            # Validar el monto
+            monto_str = self.monto_input.value.replace(',', '.').strip()
+            monto = float(monto_str)
+            
+            if monto < 0:
+                embed_error = discord.Embed(
+                    title="❌ Error",
+                    description="El monto no puede ser negativo.",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=embed_error, ephemeral=True)
+                return
+            
+            if monto > 100:  # Límite de seguridad
+                embed_error = discord.Embed(
+                    title="❌ Error", 
+                    description="El monto no puede ser mayor a 100€.",
+                    color=0xff0000
+                )
+                await interaction.response.send_message(embed=embed_error, ephemeral=True)
+                return
+            
+            # Crear vista de confirmación con el monto
+            vista_confirmacion = ConfirmarTerminar(self.canal_id, self.usuario_id, self.precio_total, monto)
+            
+            # Embed de confirmación
+            confirm_embed = discord.Embed(
+                title="⚠️ Confirmar Cierre de Reseña",
+                description="**¿Estás seguro de que quieres cerrar esta reseña?**\n\n"
+                           f"🔸 **Canal:** {interaction.channel.mention}\n"
+                           f"🔸 **Usuario:** <@{self.usuario_id}>\n"
+                           f"🔸 **Staff:** {interaction.user.mention}\n"
+                           f"🔸 **Precio calculado:** **{self.precio_total:.2f}€**\n"
+                           f"🔸 **Monto a pagar:** **{monto:.2f}€**\n\n"
+                           f"⚠️ **Esta acción:**\n"
+                           f"• Cerrará permanentemente la reseña\n"
+                           f"• Eliminará el canal en 10 segundos\n"
+                           f"• Liberará al usuario del sistema\n"
+                           f"• Agregará {monto:.2f}€ al saldo del usuario\n"
+                           f"• **NO se puede deshacer**",
+                color=0xff6b6b
+            )
+            confirm_embed.set_footer(text="Tienes 60 segundos para decidir")
+            
+            await interaction.response.send_message(embed=confirm_embed, view=vista_confirmacion, ephemeral=True)
+            
+        except ValueError:
+            embed_error = discord.Embed(
+                title="❌ Error de formato",
+                description="Por favor ingresa un número válido. Ejemplos: `0.80`, `1.50`, `2.00`",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed_error, ephemeral=True)
+        except Exception as e:
+            embed_error = discord.Embed(
+                title="❌ Error inesperado",
+                description=f"Ocurrió un error: {str(e)}",
+                color=0xff0000
+            )
+            await interaction.response.send_message(embed=embed_error, ephemeral=True)
+
+class ConfirmarTerminar(discord.ui.View):
+    def __init__(self, canal_id: int, usuario_id: int, precio_total: float, monto_pagar: float):
         super().__init__(timeout=60)
         self.canal_id = canal_id
         self.usuario_id = usuario_id
         self.precio_total = precio_total
+        self.monto_pagar = monto_pagar
 
     @discord.ui.button(label="✅ Confirmar", style=discord.ButtonStyle.danger)
     async def confirmar_terminar(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Agregar dinero al usuario en la base de datos
+        try:
+            # Obtener saldo actual del usuario
+            saldo_actual = await database.get_user_balance(self.usuario_id)
+            nuevo_saldo = saldo_actual + Decimal(str(self.monto_pagar))
+            
+            # Actualizar saldo
+            await database.update_user_balance(
+                self.usuario_id, 
+                nuevo_saldo, 
+                interaction.user.id,
+                'PAGO_RESEÑA',
+                f'Pago por reseña completada: {self.monto_pagar:.2f}€'
+            )
+            
+        except Exception as e:
+            print(f"Error actualizando saldo: {e}")
+            # Continuar con el proceso aunque falle el saldo
+        
         # Embed con información de pago
         payment_embed = discord.Embed(
             title="💰 Información de Pago",
             description=f"**Reseña completada exitosamente**\n\n"
-                       f"📸 **Canal:** {interaction.channel.mention}\n"
-                       f"📸 **Usuario:** <@{self.usuario_id}>\n"
-                       f"📸 **Total a pagar:** **{self.precio_total:.2f}€**\n"
-                       f"📸 **Staff responsable:** {interaction.user.mention}\n\n"
-                       f"⚠️ **Recuerda realizar el pago correspondiente al usuario.**",
+                       f"🔸 **Canal:** {interaction.channel.mention}\n"
+                       f"🔸 **Usuario:** <@{self.usuario_id}>\n"
+                       f"🔸 **Precio calculado:** **{self.precio_total:.2f}€**\n"
+                       f"🔸 **Monto pagado:** **{self.monto_pagar:.2f}€**\n"
+                       f"🔸 **Staff responsable:** {interaction.user.mention}\n\n"
+                       f"✅ **El saldo ha sido agregado automáticamente.**",
             color=0x00ff00,
             timestamp=datetime.datetime.now()
         )
@@ -38,9 +138,10 @@ class ConfirmarTerminar(discord.ui.View):
                 user_embed = discord.Embed(
                     title="✅ Reseña Completada",
                     description=f"¡Tu reseña ha sido completada exitosamente!\n\n"
-                               f"💰 **Has ganado:** **{self.precio_total:.2f}€**\n"
-                               f"🏆 **Staff responsable:** {interaction.user.display_name}\n\n"
-                               f"El pago será procesado por el staff correspondiente.",
+                               f"💰 **Has ganado:** **{self.monto_pagar:.2f}€**\n"
+                               f"🏆 **Staff responsable:** {interaction.user.display_name}\n"
+                               f"💳 **Saldo agregado automáticamente a tu cuenta**\n\n"
+                               f"Puedes verificar tu saldo usando el comando correspondiente.",
                     color=0x00ff00,
                     timestamp=datetime.datetime.now()
                 )
@@ -72,7 +173,7 @@ class ConfirmarTerminar(discord.ui.View):
                     await vista.actualizar_mensaje_original(fake_interaction)
 
         # Eliminar el canal
-        await interaction.channel.delete(reason=f"Reseña completada para {usuario.display_name if usuario else 'Usuario desconocido'} - Pago: {self.precio_total:.2f}€")
+        await interaction.channel.delete(reason=f"Reseña completada para {usuario.display_name if usuario else 'Usuario desconocido'} - Pago: {self.monto_pagar:.2f}€")
 
     @discord.ui.button(label="❌ Cancelar", style=discord.ButtonStyle.secondary)
     async def cancelar_terminar(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -158,7 +259,7 @@ class ReseñasBotones(discord.ui.View):
         mensaje_adicional = f"{interaction.user.mention}, un miembro del equipo ya está aquí.\n{interaction.user.mention} se encargará de ayudarte con tu reseña."
         await interaction.followup.send(mensaje_adicional)
 
-    @discord.ui.button(label="🔒", style=discord.ButtonStyle.danger, emoji="🔒")
+    @discord.ui.button(label="Terminar", style=discord.ButtonStyle.danger, emoji="🔒")
     async def terminar_resena(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Verificar que tenga algún rol de staff
         tiene_rol_staff = any(role.id in self.staff_role_ids for role in interaction.user.roles)
@@ -171,28 +272,11 @@ class ReseñasBotones(discord.ui.View):
             await interaction.response.send_message(embed=embed_error, ephemeral=True)
             return
 
-        # Confirmación mejorada
-        confirm_embed = discord.Embed(
-            title="⚠️ Confirmar Cierre de Reseña",
-            description="**¿Estás seguro de que quieres cerrar esta reseña?**\n\n"
-                       f"📸 **Canal:** {interaction.channel.mention}\n"
-                       f"📸 **Usuario:** <@{self.usuario_id}>\n"
-                       f"📸 **Staff:** {interaction.user.mention}\n"
-                       f"📸 **Total a pagar:** **{self.precio_actual:.2f}€**\n\n"
-                       f"⚠️ **Esta acción:**\n"
-                       f"• Cerrará permanentemente la reseña\n"
-                       f"• Eliminará el canal en 10 segundos\n"
-                       f"• Liberará al usuario del sistema\n"
-                       f"• Mostrará el resumen de pago\n"
-                       f"• **NO se puede deshacer**",
-            color=0xff6b6b
-        )
-        confirm_embed.set_footer(text="Tienes 60 segundos para decidir")
+        # Abrir modal para ingresar monto
+        modal = MontoModal(interaction.channel.id, self.usuario_id, self.precio_actual)
+        await interaction.response.send_modal(modal)
 
-        vista_confirmacion = ConfirmarTerminar(interaction.channel.id, self.usuario_id, self.precio_actual)
-        await interaction.response.send_message(embed=confirm_embed, view=vista_confirmacion, ephemeral=True)
-
-    @discord.ui.button(label="📞", style=discord.ButtonStyle.primary, emoji="📞")
+    @discord.ui.button(label="Llamar", style=discord.ButtonStyle.primary, emoji="📞")
     async def llamar_staff(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Verificar que sea el usuario de la reseña
         if interaction.user.id != self.usuario_id:
@@ -225,7 +309,7 @@ class ReseñasBotones(discord.ui.View):
         
         await interaction.response.send_message(mensaje)
 
-    @discord.ui.button(label="+", style=discord.ButtonStyle.success, emoji="➕")
+    @discord.ui.button(emoji="➕", style=discord.ButtonStyle.success)
     async def agregar_resena(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Verificar que tenga algún rol de staff
         tiene_rol_staff = any(role.id in self.staff_role_ids for role in interaction.user.roles)
@@ -311,8 +395,21 @@ class ReseñasBotones(discord.ui.View):
         )
         
         await interaction.response.send_message(embed=embed_success)
+        
+        # Enviar notificación al usuario de la reseña
+        usuario = interaction.guild.get_member(self.usuario_id)
+        if usuario:
+            embed_notificacion = discord.Embed(
+                title="➕ Reseña Adicional Agregada",
+                description=f"El staff ha agregado una reseña adicional a tu solicitud.\n\n"
+                           f"💰 **Nuevo precio:** **{self.precio_actual:.2f}€**\n"
+                           f"🎯 **Reseñas totales:** {self.incrementos_aplicados + 1}\n"
+                           f"📊 **Agregado por:** {interaction.user.display_name}",
+                color=0x00ff00
+            )
+            await interaction.followup.send(f"{usuario.mention}", embed=embed_notificacion)
 
-    @discord.ui.button(label="-", style=discord.ButtonStyle.danger, emoji="➖")
+    @discord.ui.button(emoji="➖", style=discord.ButtonStyle.danger)
     async def quitar_resena(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Verificar que tenga algún rol de staff
         tiene_rol_staff = any(role.id in self.staff_role_ids for role in interaction.user.roles)
@@ -382,6 +479,19 @@ class ReseñasBotones(discord.ui.View):
         )
         
         await interaction.response.send_message(embed=embed_success)
+        
+        # Enviar notificación al usuario de la reseña
+        usuario = interaction.guild.get_member(self.usuario_id)
+        if usuario:
+            embed_notificacion = discord.Embed(
+                title="➖ Reseña Removida",
+                description=f"El staff ha removido una reseña de tu solicitud.\n\n"
+                           f"💰 **Nuevo precio:** **{self.precio_actual:.2f}€**\n"
+                           f"🎯 **Reseñas totales:** {self.incrementos_aplicados + 1}\n"
+                           f"📊 **Removido por:** {interaction.user.display_name}",
+                color=0xff9900
+            )
+            await interaction.followup.send(f"{usuario.mention}", embed=embed_notificacion)
 
 class ResenasView(discord.ui.View):
     def __init__(self, resenas_disponibles: int, canal_resenas_id: int, staff_role_ids: List[int], mensaje_id: int = None):
@@ -726,7 +836,8 @@ class Resenas(commands.Cog):
                 "• **Usuarios normales:** 0.5€ → 1.0€ → 1.75€ → 2.50€...\n"
                 "• **Usuarios especiales:** 0.5€ → 1.0€ → 1.75€ → 2.75€ → 3.75€...\n"
                 "• **Botones +/-:** Agregar/quitar reseñas con precios dinámicos\n"
-                "• **Formato canal:** resenas-[precio]€-[usuario]\n\n"
+                "• **Formato canal:** resenas-[precio]€-[usuario]\n"
+                "• **Pago automático:** El dinero se agrega automáticamente al saldo\n\n"
             ),
             inline=False
         )
@@ -754,7 +865,8 @@ class Resenas(commands.Cog):
                 "• **Permisos:** El bot necesita gestionar canales y categorías\n"
                 "• **Límites:** Máximo 50 reseñas por sesión\n"
                 "• **Estados:** Los usuarios solo pueden tener una reseña activa\n"
-                "• **Menciones:** Los usuarios no pueden hacer menciones en los canales"
+                "• **Menciones:** Los usuarios no pueden hacer menciones en los canales\n"
+                "• **Base de datos:** Integrado con sistema económico automático"
             ),
             inline=False
         )
@@ -768,9 +880,9 @@ class Resenas(commands.Cog):
                 "3️⃣ Usuarios hacen clic en 'Quiero reseñas'\n"
                 "4️⃣ Se crea canal individual con precio dinámico\n"
                 "5️⃣ Staff reclama la reseña con botón 'Reclamar'\n"
-                "6️⃣ Staff puede usar botones +/- para ajustar precio\n"
+                "6️⃣ Staff puede usar botones ➕/➖ para ajustar precio\n"
                 "7️⃣ Usuario completa reseña y usa 'Llamar'\n"
-                "8️⃣ Staff verifica y usa 'Terminar' para cerrar con resumen de pago"
+                "8️⃣ Staff usa 'Terminar' → ingresa monto → dinero se agrega automáticamente"
             ),
             inline=False
         )
@@ -1077,7 +1189,8 @@ class Resenas(commands.Cog):
             value="• **VIP:** Roles 1406360634643316746, 1400106792196898893\n"
                   "• **Especiales:** Roles 1400106792226127922-1400106792280658067\n"
                   "• **Normales:** Resto de usuarios\n"
-                  "• **Formato canal:** resenas-[precio]€-[usuario]",
+                  "• **Formato canal:** resenas-[precio]€-[usuario]\n"
+                  "• **Base de datos:** Integrado con sistema económico",
             inline=False
         )
         
@@ -1090,7 +1203,7 @@ class Resenas(commands.Cog):
         """Comando de prueba para administradores"""
         embed = discord.Embed(
             title="✅ Módulo Resenas funcionando",
-            description="El módulo de reseñas con sistema de precios dinámicos está cargado correctamente.",
+            description="El módulo de reseñas con sistema de precios dinámicos y pago automático está cargado correctamente.",
             color=0x00ff00
         )
         embed.add_field(
@@ -1106,10 +1219,12 @@ class Resenas(commands.Cog):
         embed.add_field(
             name="Nuevas funcionalidades",
             value="• **Precios dinámicos** basados en roles de usuario\n"
-                  "• **Botones +/-** para agregar/quitar reseñas\n"
+                  "• **Botones ➕/➖** para agregar/quitar reseñas\n"
                   "• **Formato de canal mejorado** con precios\n"
                   "• **Restricción de menciones** para usuarios\n"
-                  "• **Resumen de pago** al cerrar reseñas\n"
+                  "• **Pago automático** integrado con base de datos\n"
+                  "• **Modal de monto** personalizable al cerrar\n"
+                  "• **Notificaciones** al usuario cuando se cambian reseñas\n"
                   "• **Sistema de roles especiales** con precios diferenciados",
             inline=False
         )
