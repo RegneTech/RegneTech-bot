@@ -400,7 +400,7 @@ class ReseñasBotones(discord.ui.View):
         # Actualizar el nombre del canal (ahora con cantidad de reseñas)
         try:
             nombre_usuario = interaction.channel.name.split('-')[-1]
-            nuevo_nombre = f"resenas-{self.total_resenas}x-{nombre_usuario}"
+            nuevo_nombre = f"resenas-{nombre_usuario}"
             # Crear tarea asíncrona para cambiar nombre sin esperar
             import asyncio
             asyncio.create_task(interaction.channel.edit(name=nuevo_nombre))
