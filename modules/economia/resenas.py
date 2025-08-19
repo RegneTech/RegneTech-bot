@@ -53,11 +53,11 @@ class MontoModal(discord.ui.Modal):
             confirm_embed = discord.Embed(
                 title="⚠️ Confirmar Cierre de Reseña",
                 description="**¿Estás seguro de que quieres cerrar esta reseña?**\n\n"
-                           f"🔸 **Canal:** {interaction.channel.mention}\n"
-                           f"🔸 **Usuario:** <@{self.usuario_id}>\n"
-                           f"🔸 **Staff:** {interaction.user.mention}\n"
-                           f"🔸 **Precio calculado:** **{self.precio_total:.2f}€**\n"
-                           f"🔸 **Monto a pagar:** **{monto:.2f}€**\n\n"
+                           f"📸 **Canal:** {interaction.channel.mention}\n"
+                           f"📸 **Usuario:** <@{self.usuario_id}>\n"
+                           f"📸 **Staff:** {interaction.user.mention}\n"
+                           f"📸 **Precio calculado:** **{self.precio_total:.2f}€**\n"
+                           f"📸 **Monto a pagar:** **{monto:.2f}€**\n\n"
                            f"⚠️ **Esta acción:**\n"
                            f"• Cerrará permanentemente la reseña\n"
                            f"• Eliminará el canal en 10 segundos\n"
@@ -118,11 +118,11 @@ class ConfirmarTerminar(discord.ui.View):
         payment_embed = discord.Embed(
             title="💰 Información de Pago",
             description=f"**Reseña completada exitosamente**\n\n"
-                       f"🔸 **Canal:** {interaction.channel.mention}\n"
-                       f"🔸 **Usuario:** <@{self.usuario_id}>\n"
-                       f"🔸 **Precio calculado:** **{self.precio_total:.2f}€**\n"
-                       f"🔸 **Monto pagado:** **{self.monto_pagar:.2f}€**\n"
-                       f"🔸 **Staff responsable:** {interaction.user.mention}\n\n"
+                       f"📸 **Canal:** {interaction.channel.mention}\n"
+                       f"📸 **Usuario:** <@{self.usuario_id}>\n"
+                       f"📸 **Precio calculado:** **{self.precio_total:.2f}€**\n"
+                       f"📸 **Monto pagado:** **{self.monto_pagar:.2f}€**\n"
+                       f"📸 **Staff responsable:** {interaction.user.mention}\n\n"
                        f"✅ **El saldo ha sido agregado automáticamente.**",
             color=0x00ff00,
             timestamp=datetime.datetime.now()
@@ -194,14 +194,8 @@ class ReseñasBotones(discord.ui.View):
         self.precio_inicial = precio_inicial
         self.secuencia_precios = secuencia_precios
         self.incrementos_aplicados = 0
+        self.total_resenas = 1  # Empezamos con 1 reseña
         
-        # Actualizar el label del canal con el precio
-        self.actualizar_precio_display()
-    
-    def actualizar_precio_display(self):
-        """Actualiza el precio mostrado en el título del embed"""
-        pass  # Se manejará desde el embed principal
-    
     def calcular_precio_decremento(self):
         """Calcula el precio que se debe decrementar"""
         if self.incrementos_aplicados == 0:
@@ -254,9 +248,10 @@ class ReseñasBotones(discord.ui.View):
         embed = discord.Embed(
             title="👋 Reseña Reclamada",
             description=(
-                f"🔹 **Usuario solicitante:** {usuario_solicitante.mention if usuario_solicitante else 'Desconocido'}\n"
-                f"🔹 **Staff asignado:** {interaction.user.mention}\n\n"
+                f"📹 **Usuario solicitante:** {usuario_solicitante.mention if usuario_solicitante else 'Desconocido'}\n"
+                f"📹 **Staff asignado:** {interaction.user.mention}\n\n"
                 f"💰 **Precio actual:** **{self.precio_actual:.2f}€**\n"
+                f"📊 **Reseñas totales:** {self.total_resenas}\n"
                 f"⏰ **Tiempo:** {datetime.datetime.now().strftime('%d/%m/%Y a las %H:%M')}"
             ),
             color=0xffaa00,
@@ -380,6 +375,7 @@ class ReseñasBotones(discord.ui.View):
         precio_anterior = self.precio_actual
         self.precio_actual += incremento
         self.incrementos_aplicados += 1
+        self.total_resenas += 1
         
         # Descontar una reseña del sistema
         vista_encontrada.resenas_disponibles -= 1
@@ -393,8 +389,9 @@ class ReseñasBotones(discord.ui.View):
         fake_interaction = FakeInteraction(interaction.guild)
         await vista_encontrada.actualizar_mensaje_original(fake_interaction)
         
-        # Actualizar el nombre del canal
-        nuevo_nombre = f"resenas-{self.precio_actual:.2f}€-{interaction.channel.name.split('-')[-1]}"
+        # Actualizar el nombre del canal (ahora con cantidad de reseñas)
+        nombre_usuario = interaction.channel.name.split('-')[-1]
+        nuevo_nombre = f"resenas-{self.total_resenas}x-{nombre_usuario}"
         try:
             await interaction.channel.edit(name=nuevo_nombre)
         except discord.HTTPException:
@@ -407,7 +404,7 @@ class ReseñasBotones(discord.ui.View):
                        f"💰 **Precio anterior:** {precio_anterior:.2f}€\n"
                        f"💰 **Incremento:** +{incremento:.2f}€\n"
                        f"💰 **Precio actual:** **{self.precio_actual:.2f}€**\n"
-                       f"🎯 **Reseñas totales:** {self.incrementos_aplicados + 1}\n"
+                       f"🎯 **Reseñas totales:** {self.total_resenas}\n"
                        f"📊 **Agregado por:** {interaction.user.mention}",
             color=0x00ff00,
             timestamp=datetime.datetime.now()
@@ -422,7 +419,7 @@ class ReseñasBotones(discord.ui.View):
                 title="➕ Reseña Adicional Agregada",
                 description=f"El staff ha agregado una reseña adicional a tu solicitud.\n\n"
                            f"💰 **Nuevo precio:** **{self.precio_actual:.2f}€**\n"
-                           f"🎯 **Reseñas totales:** {self.incrementos_aplicados + 1}\n"
+                           f"🎯 **Reseñas totales:** {self.total_resenas}\n"
                            f"📊 **Agregado por:** {interaction.user.display_name}",
                 color=0x00ff00
             )
@@ -445,7 +442,7 @@ class ReseñasBotones(discord.ui.View):
         if self.incrementos_aplicados == 0:
             embed_error = discord.Embed(
                 title="❌ No se puede decrementar",
-                description=f"El precio ya está en el mínimo inicial ({self.precio_inicial:.2f}€).",
+                description=f"Ya está en la reseña inicial (precio: {self.precio_inicial:.2f}€).",
                 color=0xff0000
             )
             await interaction.response.send_message(embed=embed_error, ephemeral=True)
@@ -457,6 +454,7 @@ class ReseñasBotones(discord.ui.View):
         
         self.precio_actual -= decremento
         self.incrementos_aplicados -= 1
+        self.total_resenas -= 1
         
         # Devolver una reseña al sistema
         bot = interaction.client
@@ -477,8 +475,9 @@ class ReseñasBotones(discord.ui.View):
                 await vista.actualizar_mensaje_original(fake_interaction)
                 break
         
-        # Actualizar el nombre del canal
-        nuevo_nombre = f"resenas-{self.precio_actual:.2f}€-{interaction.channel.name.split('-')[-1]}"
+        # Actualizar el nombre del canal (ahora con cantidad de reseñas)
+        nombre_usuario = interaction.channel.name.split('-')[-1]
+        nuevo_nombre = f"resenas-{self.total_resenas}x-{nombre_usuario}"
         try:
             await interaction.channel.edit(name=nuevo_nombre)
         except discord.HTTPException:
@@ -491,7 +490,7 @@ class ReseñasBotones(discord.ui.View):
                        f"💰 **Precio anterior:** {precio_anterior:.2f}€\n"
                        f"💰 **Decremento:** -{decremento:.2f}€\n"
                        f"💰 **Precio actual:** **{self.precio_actual:.2f}€**\n"
-                       f"🎯 **Reseñas totales:** {self.incrementos_aplicados + 1}\n"
+                       f"🎯 **Reseñas totales:** {self.total_resenas}\n"
                        f"📊 **Removido por:** {interaction.user.mention}",
             color=0xff9900,
             timestamp=datetime.datetime.now()
@@ -506,7 +505,7 @@ class ReseñasBotones(discord.ui.View):
                 title="➖ Reseña Removida",
                 description=f"El staff ha removido una reseña de tu solicitud.\n\n"
                            f"💰 **Nuevo precio:** **{self.precio_actual:.2f}€**\n"
-                           f"🎯 **Reseñas totales:** {self.incrementos_aplicados + 1}\n"
+                           f"🎯 **Reseñas totales:** {self.total_resenas}\n"
                            f"📊 **Removido por:** {interaction.user.display_name}",
                 color=0xff9900
             )
@@ -541,30 +540,23 @@ class ResenasView(discord.ui.View):
     
     def calcular_precio_y_secuencia(self, usuario: discord.Member) -> tuple:
         """Calcula el precio inicial y secuencia de precios basado en los roles del usuario"""
-        # Roles VIP (precio inicial más bajo)
-        roles_vip = [1406360634643316746, 1400106792196898893]
-        
-        # Roles especiales (secuencia diferente)
-        roles_especiales = [
-            1400106792226127922, 1400106792226127923, 1400106792280658061, 
-            1400106792280658062, 1400106792280658063, 1400106792280658064, 
-            1400106792280658065, 1400106792280658066, 1400106792280658067
-        ]
         
         user_role_ids = [role.id for role in usuario.roles]
         
-        if any(role_id in user_role_ids for role_id in roles_especiales):
-            # Secuencia especial: 0.5, 0.5, 0.75, 1€, 1€, 1€...
+        # Rol especial 1407462672630546512: Primera reseña 0.50€, después incrementos de 0.75€
+        if 1407462672630546512 in user_role_ids:
             precio_inicial = 0.5
-            secuencia = [0.5, 0.75] + [1.0] * 10  # Agregar varios 1€ para futuras expansiones
-        elif any(role_id in user_role_ids for role_id in roles_vip):
-            # Secuencia VIP: 0.3, 0.5, 0.75, 0.75, 0.75...
-            precio_inicial = 0.3
-            secuencia = [0.5, 0.75] + [0.75] * 10
+            secuencia = [0.5] + [0.75] * 19  # Primer incremento 0.50€, después todos 0.75€
+            
+        # Rol especial 1407462805988180098: Primera reseña 0.50€, primer incremento +0.75€, después +1€
+        elif 1407462805988180098 in user_role_ids:
+            precio_inicial = 0.5
+            secuencia = [0.75] + [1.0] * 19  # Primer incremento 0.75€, después todos 1€
+            
+        # Usuarios normales: Primera reseña 0.30€, incremento de 0.50€ y después 0.75€
         else:
-            # Secuencia normal: 0.5, 0.5, 0.75, 0.75, 0.75...
-            precio_inicial = 0.5
-            secuencia = [0.5, 0.75] + [0.75] * 10
+            precio_inicial = 0.3
+            secuencia = [0.5] + [0.75] * 19  # Primer incremento 0.50€, después todos 0.75€
         
         return precio_inicial, secuencia
     
@@ -674,16 +666,16 @@ class ResenasView(discord.ui.View):
                         manage_messages=True
                     )
             
-            # Crear el canal con el formato mejorado
+            # Crear el canal con el formato de cantidad de reseñas
             nombre_usuario = interaction.user.name.replace(" ", "-").lower()
             nombre_usuario = ''.join(c for c in nombre_usuario if c.isalnum() or c in '-_')
-            nombre_canal = f"resenas-{precio_inicial:.1f}€-{nombre_usuario}"
+            nombre_canal = f"resenas-1x-{nombre_usuario}"  # Empezamos con 1 reseña
             
             canal_ticket = await guild.create_text_channel(
                 name=nombre_canal,
                 overwrites=overwrites,
                 category=categoria,
-                topic=f"Reseña para {interaction.user.display_name} - Precio inicial: {precio_inicial:.2f}€"
+                topic=f"Reseña para {interaction.user.display_name} - Precio inicial: {precio_inicial:.2f}€ - 1 reseña"
             )
             
             # Crear embed de instrucciones
@@ -717,6 +709,7 @@ class ResenasView(discord.ui.View):
             embed_instrucciones.add_field(
                 name="💰 Información de Pago",
                 value=f"**Precio por esta reseña:** {precio_inicial:.2f}€\n"
+                      f"**Cantidad de reseñas:** 1\n"
                       "• El staff puede agregar reseñas adicionales si es necesario\n"
                       "• El pago se realizará al completar todas las reseñas",
                 inline=False
@@ -753,7 +746,8 @@ class ResenasView(discord.ui.View):
             embed_respuesta = discord.Embed(
                 title="✅ Canal creado exitosamente",
                 description=f"Se ha creado tu canal de reseña: {canal_ticket.mention}\n"
-                           f"💰 **Precio inicial:** {precio_inicial:.2f}€",
+                           f"💰 **Precio inicial:** {precio_inicial:.2f}€\n"
+                           f"📊 **Cantidad:** 1 reseña",
                 color=0x00ff00
             )
             
@@ -851,11 +845,11 @@ class Resenas(commands.Cog):
         embed.add_field(
             name="💰 **Sistema de Precios**",
             value=(
-                "• **Usuarios VIP:** 0.3€ → 0.8€ → 1.55€ → 2.30€...\n"
-                "• **Usuarios normales:** 0.5€ → 1.0€ → 1.75€ → 2.50€...\n"
-                "• **Usuarios especiales:** 0.5€ → 1.0€ → 1.75€ → 2.75€ → 3.75€...\n"
+                "• **Rol `1407462672630546512`:** Primera reseña 0.50€, primer incremento +0.50€, después incrementos de 0.75€\n"
+                "• **Rol `1407462805988180098`:** Primera reseña 0.50€, primer incremento +0.75€, después +1€\n"
+                "• **Usuarios normales:** Primera reseña 0.30€, incremento de 0.50€ y después 0.75€\n"
                 "• **Botones +/-:** Agregar/quitar reseñas con precios dinámicos\n"
-                "• **Formato canal:** resenas-[precio]€-[usuario]\n"
+                "• **Formato canal:** resenas-[cantidad]x-[usuario]\n"
                 "• **Pago automático:** El dinero se agrega automáticamente al saldo\n\n"
             ),
             inline=False
@@ -1063,10 +1057,10 @@ class Resenas(commands.Cog):
         canal_actual = ctx.channel
         
         if not usuario and canal_actual.name.startswith("resenas-"):
-            nombre_usuario_con_precio = canal_actual.name.replace("resenas-", "")
-            # Extraer el nombre después del precio (formato: precio€-usuario)
-            if "€-" in nombre_usuario_con_precio:
-                nombre_usuario = nombre_usuario_con_precio.split("€-", 1)[1]
+            # Extraer el nombre del usuario del canal (formato: resenas-1x-usuario)
+            partes = canal_actual.name.split('-')
+            if len(partes) >= 3:
+                nombre_usuario = partes[-1]  # Última parte es el nombre del usuario
                 for member in ctx.guild.members:
                     if member.name.lower() == nombre_usuario.lower():
                         usuario = member
@@ -1205,10 +1199,10 @@ class Resenas(commands.Cog):
         # Información sobre roles especiales
         embed.add_field(
             name="💰 Sistema de Precios",
-            value="• **VIP:** Roles 1406360634643316746, 1400106792196898893\n"
-                  "• **Especiales:** Roles 1400106792226127922-1400106792280658067\n"
-                  "• **Normales:** Resto de usuarios\n"
-                  "• **Formato canal:** resenas-[precio]€-[usuario]\n"
+            value="• **Rol `1407462672630546512`:** Primera reseña 0.50€, primer incremento +0.50€ después incrementos de 0.75€\n"
+                  "• **Rol `1407462805988180098`:** Primera reseña 0.50€, primer incremento +0.75€, después +1€\n"
+                  "• **Usuarios normales:** Primera reseña 0.30€, incremento de 0.50€ y después 0.75€\n"
+                  "• **Formato canal:** resenas-[cantidad]x-[usuario]\n"
                   "• **Base de datos:** Integrado con sistema económico",
             inline=False
         )
@@ -1239,12 +1233,13 @@ class Resenas(commands.Cog):
             name="Nuevas funcionalidades",
             value="• **Precios dinámicos** basados en roles de usuario\n"
                   "• **Botones ➕/➖** para agregar/quitar reseñas\n"
-                  "• **Formato de canal mejorado** con precios\n"
+                  "• **Formato de canal mejorado** con cantidad de reseñas\n"
                   "• **Restricción de menciones** para usuarios\n"
                   "• **Pago automático** integrado con base de datos\n"
                   "• **Modal de monto** personalizable al cerrar\n"
                   "• **Notificaciones** al usuario cuando se cambian reseñas\n"
-                  "• **Sistema de roles especiales** con precios diferenciados",
+                  "• **Sistema de roles especiales** con precios diferenciados\n"
+                  "• **Canales con cantidad:** resenas-[cantidad]x-[usuario]",
             inline=False
         )
         await ctx.send(embed=embed)
