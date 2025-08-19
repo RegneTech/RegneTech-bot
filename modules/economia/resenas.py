@@ -248,8 +248,8 @@ class ReseñasBotones(discord.ui.View):
         embed = discord.Embed(
             title="👋 Reseña Reclamada",
             description=(
-                f"📹 **Usuario solicitante:** {usuario_solicitante.mention if usuario_solicitante else 'Desconocido'}\n"
-                f"📹 **Staff asignado:** {interaction.user.mention}\n\n"
+                f"🔹 **Usuario solicitante:** {usuario_solicitante.mention if usuario_solicitante else 'Desconocido'}\n"
+                f"🔹 **Staff asignado:** {interaction.user.mention}\n\n"
                 f"💰 **Precio actual:** **{self.precio_actual:.2f}€**\n"
                 f"📊 **Reseñas totales:** {self.total_resenas}\n"
                 f"⏰ **Tiempo:** {datetime.datetime.now().strftime('%d/%m/%Y a las %H:%M')}"
@@ -336,6 +336,9 @@ class ReseñasBotones(discord.ui.View):
             await interaction.response.send_message(embed=embed_error, ephemeral=True)
             return
         
+        # Responder inmediatamente para evitar timeout
+        await interaction.response.defer()
+        
         # Verificar que haya reseñas disponibles en el sistema
         bot = interaction.client
         resenas_cog = bot.get_cog("Resenas")
@@ -346,7 +349,7 @@ class ReseñasBotones(discord.ui.View):
                 description="No hay más reseñas disponibles en el sistema.",
                 color=0xff0000
             )
-            await interaction.response.send_message(embed=embed_error, ephemeral=True)
+            await interaction.followup.send(embed=embed_error, ephemeral=True)
             return
         
         # Buscar la vista activa correspondiente
@@ -362,7 +365,7 @@ class ReseñasBotones(discord.ui.View):
                 description="No hay más reseñas disponibles en el sistema.",
                 color=0xff0000
             )
-            await interaction.response.send_message(embed=embed_error, ephemeral=True)
+            await interaction.followup.send(embed=embed_error, ephemeral=True)
             return
         
         # Calcular nuevo precio
@@ -381,38 +384,30 @@ class ReseñasBotones(discord.ui.View):
         vista_encontrada.resenas_disponibles -= 1
         vista_encontrada.actualizar_boton()
         
-        # Actualizar mensaje principal del sistema
-        class FakeInteraction:
-            def __init__(self, guild):
-                self.guild = guild
-        
-        fake_interaction = FakeInteraction(interaction.guild)
-        await vista_encontrada.actualizar_mensaje_original(fake_interaction)
+        # Actualizar mensaje principal del sistema de forma asíncrona sin esperar
+        try:
+            class FakeInteraction:
+                def __init__(self, guild):
+                    self.guild = guild
+            
+            fake_interaction = FakeInteraction(interaction.guild)
+            # Crear tarea asíncrona sin esperar resultado
+            import asyncio
+            asyncio.create_task(vista_encontrada.actualizar_mensaje_original(fake_interaction))
+        except Exception as e:
+            print(f"Error al actualizar mensaje principal: {e}")
         
         # Actualizar el nombre del canal (ahora con cantidad de reseñas)
-        nombre_usuario = interaction.channel.name.split('-')[-1]
-        nuevo_nombre = f"resenas-{self.total_resenas}x-{nombre_usuario}"
         try:
-            await interaction.channel.edit(name=nuevo_nombre)
-        except discord.HTTPException:
-            pass  # Ignorar errores de rate limit
+            nombre_usuario = interaction.channel.name.split('-')[-1]
+            nuevo_nombre = f"resenas-{self.total_resenas}x-{nombre_usuario}"
+            # Crear tarea asíncrona para cambiar nombre sin esperar
+            import asyncio
+            asyncio.create_task(interaction.channel.edit(name=nuevo_nombre))
+        except Exception as e:
+            print(f"Error al cambiar nombre del canal: {e}")
         
-        # Respuesta de éxito
-        embed_success = discord.Embed(
-            title="✅ Reseña agregada exitosamente",
-            description=f"**Se ha agregado una reseña adicional**\n\n"
-                       f"💰 **Precio anterior:** {precio_anterior:.2f}€\n"
-                       f"💰 **Incremento:** +{incremento:.2f}€\n"
-                       f"💰 **Precio actual:** **{self.precio_actual:.2f}€**\n"
-                       f"🎯 **Reseñas totales:** {self.total_resenas}\n"
-                       f"📊 **Agregado por:** {interaction.user.mention}",
-            color=0x00ff00,
-            timestamp=datetime.datetime.now()
-        )
-        
-        await interaction.response.send_message(embed=embed_success)
-        
-        # Enviar notificación al usuario de la reseña
+        # Enviar solo la notificación al usuario de la reseña
         usuario = interaction.guild.get_member(self.usuario_id)
         if usuario:
             embed_notificacion = discord.Embed(
@@ -421,9 +416,22 @@ class ReseñasBotones(discord.ui.View):
                            f"💰 **Nuevo precio:** **{self.precio_actual:.2f}€**\n"
                            f"🎯 **Reseñas totales:** {self.total_resenas}\n"
                            f"📊 **Agregado por:** {interaction.user.display_name}",
-                color=0x00ff00
+                color=0x00ff00,
+                timestamp=datetime.datetime.now()
             )
             await interaction.followup.send(f"{usuario.mention}", embed=embed_notificacion)
+        else:
+            # Si no se encuentra el usuario, enviar confirmación simple
+            embed_success = discord.Embed(
+                title="✅ Reseña agregada exitosamente",
+                description=f"**Se ha agregado una reseña adicional**\n\n"
+                           f"💰 **Precio anterior:** {precio_anterior:.2f}€\n"
+                           f"💰 **Incremento:** +{incremento:.2f}€\n"
+                           f"💰 **Precio actual:** **{self.precio_actual:.2f}€**\n"
+                           f"🎯 **Reseñas totales:** {self.total_resenas}",
+                color=0x00ff00
+            )
+            await interaction.followup.send(embed=embed_success, ephemeral=True)
 
     @discord.ui.button(emoji="➖", style=discord.ButtonStyle.danger)
     async def quitar_resena(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -448,6 +456,9 @@ class ReseñasBotones(discord.ui.View):
             await interaction.response.send_message(embed=embed_error, ephemeral=True)
             return
         
+        # Responder inmediatamente para evitar timeout
+        await interaction.response.defer()
+        
         # Calcular decremento
         decremento = self.calcular_precio_decremento()
         precio_anterior = self.precio_actual
@@ -466,39 +477,29 @@ class ReseñasBotones(discord.ui.View):
                 vista.resenas_disponibles += 1
                 vista.actualizar_boton()
                 
-                # Actualizar mensaje principal del sistema
-                class FakeInteraction:
-                    def __init__(self, guild):
-                        self.guild = guild
-                
-                fake_interaction = FakeInteraction(interaction.guild)
-                await vista.actualizar_mensaje_original(fake_interaction)
+                # Actualizar mensaje principal del sistema de forma asíncrona
+                try:
+                    class FakeInteraction:
+                        def __init__(self, guild):
+                            self.guild = guild
+                    
+                    fake_interaction = FakeInteraction(interaction.guild)
+                    import asyncio
+                    asyncio.create_task(vista.actualizar_mensaje_original(fake_interaction))
+                except Exception as e:
+                    print(f"Error al actualizar mensaje principal: {e}")
                 break
         
         # Actualizar el nombre del canal (ahora con cantidad de reseñas)
-        nombre_usuario = interaction.channel.name.split('-')[-1]
-        nuevo_nombre = f"resenas-{self.total_resenas}x-{nombre_usuario}"
         try:
-            await interaction.channel.edit(name=nuevo_nombre)
-        except discord.HTTPException:
-            pass  # Ignorar errores de rate limit
+            nombre_usuario = interaction.channel.name.split('-')[-1]
+            nuevo_nombre = f"resenas-{self.total_resenas}x-{nombre_usuario}"
+            import asyncio
+            asyncio.create_task(interaction.channel.edit(name=nuevo_nombre))
+        except Exception as e:
+            print(f"Error al cambiar nombre del canal: {e}")
         
-        # Respuesta de éxito
-        embed_success = discord.Embed(
-            title="✅ Reseña removida exitosamente",
-            description=f"**Se ha removido una reseña**\n\n"
-                       f"💰 **Precio anterior:** {precio_anterior:.2f}€\n"
-                       f"💰 **Decremento:** -{decremento:.2f}€\n"
-                       f"💰 **Precio actual:** **{self.precio_actual:.2f}€**\n"
-                       f"🎯 **Reseñas totales:** {self.total_resenas}\n"
-                       f"📊 **Removido por:** {interaction.user.mention}",
-            color=0xff9900,
-            timestamp=datetime.datetime.now()
-        )
-        
-        await interaction.response.send_message(embed=embed_success)
-        
-        # Enviar notificación al usuario de la reseña
+        # Enviar solo la notificación al usuario de la reseña
         usuario = interaction.guild.get_member(self.usuario_id)
         if usuario:
             embed_notificacion = discord.Embed(
@@ -507,9 +508,22 @@ class ReseñasBotones(discord.ui.View):
                            f"💰 **Nuevo precio:** **{self.precio_actual:.2f}€**\n"
                            f"🎯 **Reseñas totales:** {self.total_resenas}\n"
                            f"📊 **Removido por:** {interaction.user.display_name}",
-                color=0xff9900
+                color=0xff9900,
+                timestamp=datetime.datetime.now()
             )
             await interaction.followup.send(f"{usuario.mention}", embed=embed_notificacion)
+        else:
+            # Si no se encuentra el usuario, enviar confirmación simple
+            embed_success = discord.Embed(
+                title="✅ Reseña removida exitosamente",
+                description=f"**Se ha removido una reseña**\n\n"
+                           f"💰 **Precio anterior:** {precio_anterior:.2f}€\n"
+                           f"💰 **Decremento:** -{decremento:.2f}€\n"
+                           f"💰 **Precio actual:** **{self.precio_actual:.2f}€**\n"
+                           f"🎯 **Reseñas totales:** {self.total_resenas}",
+                color=0xff9900
+            )
+            await interaction.followup.send(embed=embed_success, ephemeral=True)
 
 class ResenasView(discord.ui.View):
     def __init__(self, resenas_disponibles: int, canal_resenas_id: int, staff_role_ids: List[int], mensaje_id: int = None):
