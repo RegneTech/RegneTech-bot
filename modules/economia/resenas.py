@@ -493,7 +493,7 @@ class ReseñasBotones(discord.ui.View):
         # Actualizar el nombre del canal (ahora con cantidad de reseñas)
         try:
             nombre_usuario = interaction.channel.name.split('-')[-1]
-            nuevo_nombre = f"resenas-{self.total_resenas}x-{nombre_usuario}"
+            nuevo_nombre = f"resenas-{nombre_usuario}"
             import asyncio
             asyncio.create_task(interaction.channel.edit(name=nuevo_nombre))
         except Exception as e:
@@ -683,7 +683,7 @@ class ResenasView(discord.ui.View):
             # Crear el canal con el formato de cantidad de reseñas
             nombre_usuario = interaction.user.name.replace(" ", "-").lower()
             nombre_usuario = ''.join(c for c in nombre_usuario if c.isalnum() or c in '-_')
-            nombre_canal = f"resenas-1x-{nombre_usuario}"  # Empezamos con 1 reseña
+            nombre_canal = f"resenas-{nombre_usuario}"  # Empezamos con 1 reseña
             
             canal_ticket = await guild.create_text_channel(
                 name=nombre_canal,
@@ -863,7 +863,7 @@ class Resenas(commands.Cog):
                 "• **Rol `1407462805988180098`:** Primera reseña 0.50€, primer incremento +0.75€, después +1€\n"
                 "• **Usuarios normales:** Primera reseña 0.30€, incremento de 0.50€ y después 0.75€\n"
                 "• **Botones +/-:** Agregar/quitar reseñas con precios dinámicos\n"
-                "• **Formato canal:** resenas-[cantidad]x-[usuario]\n"
+                "• **Formato canal:** resenas-[usuario]\n"
                 "• **Pago automático:** El dinero se agrega automáticamente al saldo\n\n"
             ),
             inline=False
@@ -1216,7 +1216,7 @@ class Resenas(commands.Cog):
             value="• **Rol `1407462672630546512`:** Primera reseña 0.50€, primer incremento +0.50€ después incrementos de 0.75€\n"
                   "• **Rol `1407462805988180098`:** Primera reseña 0.50€, primer incremento +0.75€, después +1€\n"
                   "• **Usuarios normales:** Primera reseña 0.30€, incremento de 0.50€ y después 0.75€\n"
-                  "• **Formato canal:** resenas-[cantidad]x-[usuario]\n"
+                  "• **Formato canal:** resenas-[usuario]\n"
                   "• **Base de datos:** Integrado con sistema económico",
             inline=False
         )
@@ -1253,7 +1253,7 @@ class Resenas(commands.Cog):
                   "• **Modal de monto** personalizable al cerrar\n"
                   "• **Notificaciones** al usuario cuando se cambian reseñas\n"
                   "• **Sistema de roles especiales** con precios diferenciados\n"
-                  "• **Canales con cantidad:** resenas-[cantidad]x-[usuario]",
+                  "• **Canales con cantidad:** resenas-[usuario]",
             inline=False
         )
         await ctx.send(embed=embed)
