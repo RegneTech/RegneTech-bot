@@ -100,31 +100,18 @@ class Verify(commands.Cog):
             self._role_operations.discard(user_key)
 
     async def manage_auto_role(self, member):
-        """Gestiona el rol automático basado en si tiene rol de rango"""
+        """Gestiona el rol automático: si tiene rol 1400106792196898893, lo remueve"""
         try:
-            verified_role = member.guild.get_role(self.VERIFIED_ROLE_ID)
-            auto_role = member.guild.get_role(self.AUTO_ROLE_ID)
+            auto_role = member.guild.get_role(self.AUTO_ROLE_ID)  # 1406360634643316746
+            nivel_10_role = member.guild.get_role(1400106792196898893)  # Rol nivel 10
             
-            if not verified_role or not auto_role:
-                print("❌ No se encontraron los roles necesarios")
+            if not auto_role or not nivel_10_role:
                 return
             
-            # Solo proceder si el usuario está verificado
-            if verified_role not in member.roles:
-                return
-            
-            has_rango = self.has_rango_role(member)
-            has_auto = auto_role in member.roles
-            
-            print(f"🔍 Analizando {member.display_name}: Rango={has_rango}, Auto={has_auto}")
-            
-            if has_rango and has_auto:
-                # Tiene rol de rango pero también el automático -> remover automático
+            # Si tiene el rol de nivel 10, remover el rol automático
+            if nivel_10_role in member.roles and auto_role in member.roles:
                 await self.safe_role_operation(member, "remove", auto_role)
-                
-            elif not has_rango and not has_auto:
-                # No tiene rol de rango ni automático -> añadir automático
-                await self.safe_role_operation(member, "add", auto_role)
+                print(f"✅ Removido rol automático de {member.display_name} (tiene rol nivel 10)")
                 
         except Exception as e:
             print(f"❌ Error en manage_auto_role para {member.display_name}: {e}")
@@ -133,26 +120,19 @@ class Verify(commands.Cog):
     
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
-        """Evento mejorado que gestiona cambios de roles"""
+        """Evento que detecta cuando alguien obtiene el rol nivel 10"""
         # Solo proceder si hay cambios en los roles
         if before.roles == after.roles:
             return
         
-        # Pequeño delay para evitar spam de eventos
-        await asyncio.sleep(0.5)
-        
         try:
-            # Obtener roles añadidos y removidos
+            # Verificar si se añadió el rol nivel 10
             added_roles = set(after.roles) - set(before.roles)
-            removed_roles = set(before.roles) - set(after.roles)
+            nivel_10_role = after.guild.get_role(1400106792196898893)
             
-            # Verificar cambios en roles de rango
-            rango_added = any(role.name.startswith(self.RANGO_PREFIX) for role in added_roles)
-            rango_removed = any(role.name.startswith(self.RANGO_PREFIX) for role in removed_roles)
-            
-            # Solo gestionar si hubo cambios relevantes
-            if rango_added or rango_removed:
-                print(f"🔄 Detectado cambio de rol de rango en {after.display_name}")
+            # Si se añadió el rol nivel 10, gestionar el rol automático
+            if nivel_10_role and nivel_10_role in added_roles:
+                print(f"🔄 {after.display_name} obtuvo el rol nivel 10, gestionando rol automático")
                 await self.manage_auto_role(after)
                 
         except Exception as e:
@@ -197,34 +177,35 @@ class Verify(commands.Cog):
     @commands.command(name="fix_roles")
     @commands.has_permissions(administrator=True)
     async def fix_roles(self, ctx):
-        """Corrige los roles automáticos de todos los usuarios verificados"""
-        loading_msg = await ctx.send("🔄 Analizando y corrigiendo roles...")
+        """Remueve el rol automático de usuarios que tienen el rol nivel 10"""
+        loading_msg = await ctx.send("🔄 Revisando usuarios con rol nivel 10...")
         
-        verified_role = ctx.guild.get_role(self.VERIFIED_ROLE_ID)
-        if not verified_role:
-            await loading_msg.edit(content="❌ Rol de verificado no encontrado")
+        auto_role = ctx.guild.get_role(self.AUTO_ROLE_ID)
+        nivel_10_role = ctx.guild.get_role(1400106792196898893)
+        
+        if not auto_role or not nivel_10_role:
+            await loading_msg.edit(content="❌ No se encontraron los roles necesarios")
             return
         
         fixed_count = 0
-        verified_members = [m for m in ctx.guild.members if verified_role in m.roles]
+        members_with_nivel10 = [m for m in ctx.guild.members if nivel_10_role in m.roles]
         
-        for member in verified_members:
-            try:
-                old_has_rango = self.has_rango_role(member)
-                await self.manage_auto_role(member)
-                fixed_count += 1
-                
-                # Pequeño delay para evitar rate limits
-                if fixed_count % 10 == 0:
-                    await asyncio.sleep(1)
+        for member in members_with_nivel10:
+            if auto_role in member.roles:
+                try:
+                    await self.safe_role_operation(member, "remove", auto_role)
+                    fixed_count += 1
                     
-            except Exception as e:
-                print(f"❌ Error corrigiendo {member.display_name}: {e}")
+                    if fixed_count % 10 == 0:
+                        await asyncio.sleep(1)
+                        
+                except Exception as e:
+                    print(f"❌ Error corrigiendo {member.display_name}: {e}")
         
         embed = discord.Embed(
             title="🛠️ Corrección de Roles Completada",
-            description=f"Se analizaron **{len(verified_members)}** usuarios verificados.\n"
-                       f"Operaciones realizadas en **{fixed_count}** usuarios.",
+            description=f"Se revisaron **{len(members_with_nivel10)}** usuarios con rol nivel 10.\n"
+                       f"Se removió el rol automático de **{fixed_count}** usuarios.",
             color=0x00ff00
         )
         
@@ -233,18 +214,19 @@ class Verify(commands.Cog):
     @commands.command(name="roles_status")
     @commands.has_permissions(administrator=True)
     async def roles_status(self, ctx):
-        """Muestra estadísticas detalladas del sistema de roles"""
+        """Muestra estadísticas del sistema de roles"""
         verified_role = ctx.guild.get_role(self.VERIFIED_ROLE_ID)
         auto_role = ctx.guild.get_role(self.AUTO_ROLE_ID)
+        nivel_10_role = ctx.guild.get_role(1400106792196898893)
         
-        if not verified_role or not auto_role:
+        if not verified_role or not auto_role or not nivel_10_role:
             await ctx.send("❌ No se encontraron los roles necesarios")
             return
         
         # Estadísticas
         verified_members = [m for m in ctx.guild.members if verified_role in m.roles]
         auto_members = [m for m in verified_members if auto_role in m.roles]
-        rango_members = [m for m in verified_members if self.has_rango_role(m)]
+        nivel10_members = [m for m in verified_members if nivel_10_role in m.roles]
         
         embed = discord.Embed(
             title="🎭 Estado del Sistema de Roles",
@@ -255,7 +237,7 @@ class Verify(commands.Cog):
             name="📊 Estadísticas Generales",
             value=f"**Total verificados:** {len(verified_members)}\n"
                   f"**Con rol automático:** {len(auto_members)}\n"
-                  f"**Con rol de rango:** {len(rango_members)}",
+                  f"**Con rol nivel 10:** {len(nivel10_members)}",
             inline=True
         )
         
@@ -263,26 +245,21 @@ class Verify(commands.Cog):
             name="⚙️ Configuración",
             value=f"**Verificado:** {verified_role.mention}\n"
                   f"**Automático:** {auto_role.mention}\n"
-                  f"**Prefijo Rango:** `{self.RANGO_PREFIX}`",
+                  f"**Nivel 10:** {nivel_10_role.mention}",
             inline=True
         )
         
-        # Verificar posibles inconsistencias
-        inconsistencies = []
-        for member in verified_members:
-            has_rango = self.has_rango_role(member)
-            has_auto = auto_role in member.roles
-            
-            if has_rango and has_auto:
-                inconsistencies.append(f"• {member.display_name} (tiene ambos)")
-            elif not has_rango and not has_auto:
-                inconsistencies.append(f"• {member.display_name} (no tiene ninguno)")
+        # Verificar usuarios que tienen ambos roles (inconsistencia)
+        problem_users = []
+        for member in nivel10_members:
+            if auto_role in member.roles:
+                problem_users.append(f"• {member.display_name}")
         
-        if inconsistencies:
+        if problem_users:
             embed.add_field(
-                name="⚠️ Inconsistencias Detectadas",
-                value="\n".join(inconsistencies[:5]) + 
-                      (f"\n... y {len(inconsistencies)-5} más" if len(inconsistencies) > 5 else ""),
+                name="⚠️ Usuarios con ambos roles",
+                value="\n".join(problem_users[:5]) + 
+                      (f"\n... y {len(problem_users)-5} más" if len(problem_users) > 5 else ""),
                 inline=False
             )
             embed.add_field(
@@ -293,7 +270,7 @@ class Verify(commands.Cog):
         else:
             embed.add_field(
                 name="✅ Estado",
-                value="No se detectaron inconsistencias",
+                value="No hay usuarios con ambos roles",
                 inline=False
             )
         
@@ -490,13 +467,8 @@ class VerificationView(discord.ui.View):
             return
         
         try:
-            # Verificar si tiene rol de rango
-            has_rango = self.cog.has_rango_role(interaction.user)
-            
-            # Preparar roles a asignar
-            roles_to_add = [verified_role]
-            if not has_rango:
-                roles_to_add.append(auto_role)
+            # Asignar AMBOS roles siempre al verificarse
+            roles_to_add = [verified_role, auto_role]
             
             # Asignar roles usando el método seguro del cog
             success = await self.cog.safe_role_operation(interaction.user, "add", *roles_to_add)
@@ -518,12 +490,8 @@ class VerificationView(discord.ui.View):
                 color=0x00ff00
             )
             
-            roles_info = f"**Roles asignados:**\n• {verified_role.name}"
-            if auto_role in roles_to_add:
-                roles_info += f"\n• {auto_role.name}"
-                roles_info += f"\n\n*El rol automático se gestiona según tus roles de rango*"
-            else:
-                roles_info += f"\n\n*No se asignó el rol automático porque tienes un rol de rango*"
+            roles_info = f"**Roles asignados:**\n• {verified_role.name}\n• {auto_role.name}"
+            roles_info += f"\n\n*El rol automático se removerá automáticamente si obtienes el rol nivel 10*"
             
             welcome_embed.add_field(
                 name="🎭 Información de Roles",
