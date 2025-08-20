@@ -1,1293 +1,957 @@
 import discord
 from discord.ext import commands, tasks
-import json
-import asyncio
-import time
-import math
-from datetime import datetime, timedelta
-from PIL import Image, ImageDraw, ImageFont, ImageOps
-import io
+from PIL import Image, ImageDraw, ImageFont
 import aiohttp
+import io
 import os
+import asyncio
 import random
-import logging
+from datetime import datetime, timedelta
+from database import (
+    get_user_level_data, 
+    get_user_balance, 
+    get_user_rank,
+    get_guild_level_config,
+    add_user_xp,
+    set_user_xp,
+    set_user_level
+)
+import math
 
-# Importar funciones de la base de datos
-import database
-
-# Configurar logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-class LevelCalculator:
-    @staticmethod
-    def calculate_level(xp, formula='exponential'):
-        """Calcula el nivel basado en la XP (1-200)"""
-        if formula == 'exponential':
-            # Fórmula optimizada para 200 niveles
-            level = int(math.sqrt(xp / 50)) + 1
-            return min(level, 200)
-        elif formula == 'linear':
-            level = int(xp / 10000) + 1
-            return min(level, 200)
-        elif formula == 'logarithmic':
-            if xp <= 0:
-                return 1
-            level = int(10 * math.log10(xp + 1)) + 1
-            return min(level, 200)
-        else:
-            level = int(math.sqrt(xp / 50)) + 1
-            return min(level, 200)
-    
-    @staticmethod
-    def calculate_xp_for_level(level, formula='exponential'):
-        """Calcula la XP necesaria para un nivel específico"""
-        if level > 200:
-            level = 200
-        if level < 1:
-            level = 1
-            
-        if formula == 'exponential':
-            return ((level - 1) ** 2) * 50
-        elif formula == 'linear':
-            return (level - 1) * 10000
-        elif formula == 'logarithmic':
-            return int((10 ** ((level - 1) / 10)) - 1)
-        else:
-            return ((level - 1) ** 2) * 50
-    
-    @staticmethod
-    def get_xp_for_next_level(current_xp, formula='exponential'):
-        """Obtiene la XP necesaria para el siguiente nivel"""
-        current_level = LevelCalculator.calculate_level(current_xp, formula)
-        if current_level >= 200:
-            return LevelCalculator.calculate_xp_for_level(200, formula)
-        next_level_xp = LevelCalculator.calculate_xp_for_level(current_level + 1, formula)
-        return next_level_xp
-
-class ProfileImageGenerator:
-    def __init__(self):
-        self.template_path = r"resources\images\level.png"
-        self.pixel_fonts = [
-            r"resources\fonts\pixel.ttf",
-        ]
-    
-    def load_pixel_font(self, size):
-        """Carga una fuente estilo pixel art"""
-        for font_path in self.pixel_fonts:
-            try:
-                return ImageFont.truetype(font_path, size)
-            except:
-                continue
-        
-        try:
-            return ImageFont.load_default()
-        except:
-            return ImageFont.load_default()
-    
-    def draw_rounded_rectangle(self, draw, xy, radius, fill=None, outline=None, width=1):
-        """Dibuja un rectángulo con bordes redondeados"""
-        x1, y1, x2, y2 = xy
-        
-        # Dibujar rectángulo principal
-        draw.rectangle([x1 + radius, y1, x2 - radius, y2], fill=fill, outline=outline, width=width)
-        draw.rectangle([x1, y1 + radius, x2, y2 - radius], fill=fill, outline=outline, width=width)
-        
-        # Dibujar esquinas redondeadas
-        draw.pieslice([x1, y1, x1 + 2*radius, y1 + 2*radius], 180, 270, fill=fill, outline=outline, width=width)
-        draw.pieslice([x2 - 2*radius, y1, x2, y1 + 2*radius], 270, 360, fill=fill, outline=outline, width=width)
-        draw.pieslice([x1, y2 - 2*radius, x1 + 2*radius, y2], 90, 180, fill=fill, outline=outline, width=width)
-        draw.pieslice([x2 - 2*radius, y2 - 2*radius, x2, y2], 0, 90, fill=fill, outline=outline, width=width)
-    
-    async def generate_profile_image(self, user, user_data, rank, guild_name=""):
-        """Genera una imagen de perfil moderna y profesional"""
-        try:
-            # Crear imagen base con gradiente mejorado
-            img = Image.new('RGBA', (800, 300), color=(0, 0, 0, 0))
-            
-            # Crear gradiente de fondo más dinámico
-            gradient = Image.new('RGBA', (800, 300), color=(0, 0, 0, 0))
-            grad_draw = ImageDraw.Draw(gradient)
-            
-            # Gradiente basado en el nivel del usuario
-            level = user_data['level']
-            if level >= 100:
-                # Gradiente dorado para niveles altos
-                base_color = (40, 35, 20)
-                accent_color = (80, 65, 30)
-            elif level >= 50:
-                # Gradiente púrpura para niveles medios
-                base_color = (35, 25, 45)
-                accent_color = (60, 40, 70)
-            else:
-                # Gradiente azul para niveles bajos
-                base_color = (20, 25, 45)
-                accent_color = (35, 45, 70)
-            
-            for y in range(300):
-                ratio = y / 300
-                r = int(base_color[0] + (accent_color[0] - base_color[0]) * ratio)
-                g = int(base_color[1] + (accent_color[1] - base_color[1]) * ratio)
-                b = int(base_color[2] + (accent_color[2] - base_color[2]) * ratio)
-                grad_draw.line([(0, y), (800, y)], fill=(r, g, b, 255))
-            
-            # Añadir patrón de puntos para textura
-            for i in range(0, 800, 50):
-                for j in range(0, 300, 50):
-                    alpha = random.randint(10, 30)
-                    grad_draw.ellipse([i, j, i+2, j+2], fill=(255, 255, 255, alpha))
-            
-            img = gradient
-            draw = ImageDraw.Draw(img)
-            
-            # Cargar fuentes mejoradas
-            try:
-                font_large = ImageFont.truetype("arial.ttf", 32)
-                font_medium = ImageFont.truetype("arial.ttf", 24)
-                font_small = ImageFont.truetype("arial.ttf", 18)
-                font_tiny = ImageFont.truetype("arial.ttf", 14)
-            except:
-                font_large = ImageFont.load_default()
-                font_medium = ImageFont.load_default()
-                font_small = ImageFont.load_default()
-                font_tiny = ImageFont.load_default()
-            
-            # Avatar con efectos mejorados
-            avatar_url = str(user.display_avatar.url)
-            async with aiohttp.ClientSession() as session:
-                async with session.get(avatar_url) as resp:
-                    avatar_bytes = await resp.read()
-
-            avatar = Image.open(io.BytesIO(avatar_bytes)).convert('RGBA')
-            avatar_size = 130
-            avatar = avatar.resize((avatar_size, avatar_size), Image.Resampling.LANCZOS)
-            
-            # Crear máscara circular
-            mask = Image.new('L', (avatar_size, avatar_size), 0)
-            mask_draw = ImageDraw.Draw(mask)
-            mask_draw.ellipse((0, 0, avatar_size, avatar_size), fill=255)
-            
-            circular_avatar = Image.new('RGBA', (avatar_size, avatar_size), (0, 0, 0, 0))
-            circular_avatar.paste(avatar, (0, 0), mask=mask)
-            
-            # Borde del avatar basado en el nivel
-            border_size = avatar_size + 12
-            border_color = (255, 215, 0, 200) if level >= 100 else (138, 43, 226, 200) if level >= 50 else (30, 144, 255, 200)
-            
-            border_mask = Image.new('L', (border_size, border_size), 0)
-            border_draw = ImageDraw.Draw(border_mask)
-            border_draw.ellipse((0, 0, border_size, border_size), fill=255)
-            
-            border_img = Image.new('RGBA', (border_size, border_size), border_color)
-            border_img.putalpha(border_mask)
-            
-            # Posicionar avatar
-            avatar_x, avatar_y = 40, 85
-            img.paste(border_img, (avatar_x - 6, avatar_y - 6), border_img)
-            img.paste(circular_avatar, (avatar_x, avatar_y), circular_avatar)
-            
-            # Información del usuario
-            username = user.display_name[:20]
-            text_start_x = avatar_x + avatar_size + 40
-            
-            # Nombre con sombra mejorada
-            name_y = avatar_y + 15
-            draw.text((text_start_x + 3, name_y + 3), username, font=font_large, fill=(0, 0, 0, 150))
-            draw.text((text_start_x, name_y), username, font=font_large, fill=(255, 255, 255, 255))
-            
-            # Nivel con colores dinámicos
-            level_text = f"Nivel {user_data['level']}"
-            level_color = (255, 215, 0, 255) if level >= 100 else (138, 43, 226, 255) if level >= 50 else (0, 255, 255, 255)
-            level_y = name_y + 45
-            
-            draw.text((text_start_x + 2, level_y + 2), level_text, font=font_medium, fill=(0, 0, 0, 120))
-            draw.text((text_start_x, level_y), level_text, font=font_medium, fill=level_color)
-            
-            # Barra de progreso mejorada
-            current_level_xp = LevelCalculator.calculate_xp_for_level(user_data['level'])
-            if user_data['level'] >= 200:
-                next_level_xp = current_level_xp
-                progress_xp = 0
-                needed_xp = 0
-                progress_percentage = 1.0
-            else:
-                next_level_xp = LevelCalculator.calculate_xp_for_level(user_data['level'] + 1)
-                progress_xp = user_data['xp'] - current_level_xp
-                needed_xp = next_level_xp - current_level_xp
-                progress_percentage = progress_xp / needed_xp if needed_xp > 0 else 1.0
-            
-            # Barra de progreso más elaborada
-            bar_x = text_start_x
-            bar_y = level_y + 45
-            bar_width = 400
-            bar_height = 25
-            border_radius = 12
-            
-            # Sombra de la barra
-            shadow_offset = 3
-            self.draw_rounded_rectangle(
-                draw,
-                [bar_x + shadow_offset, bar_y + shadow_offset, bar_x + bar_width + shadow_offset, bar_y + bar_height + shadow_offset],
-                border_radius,
-                fill=(0, 0, 0, 80)
-            )
-            
-            # Fondo de la barra
-            self.draw_rounded_rectangle(
-                draw,
-                [bar_x, bar_y, bar_x + bar_width, bar_y + bar_height],
-                border_radius,
-                fill=(30, 30, 35, 255),
-                outline=(60, 60, 70, 255),
-                width=2
-            )
-            
-            # Barra de progreso con gradiente dinámico
-            if progress_percentage > 0:
-                progress_width = int(bar_width * progress_percentage)
-                
-                progress_img = Image.new('RGBA', (progress_width, bar_height), color=(0, 0, 0, 0))
-                prog_draw = ImageDraw.Draw(progress_img)
-                
-                # Gradiente basado en el nivel
-                for x in range(progress_width):
-                    ratio = x / progress_width if progress_width > 0 else 0
-                    if level >= 100:
-                        # Gradiente dorado
-                        r = int(255 * (1 - ratio) + 218 * ratio)
-                        g = int(215 * (1 - ratio) + 165 * ratio)
-                        b = int(0 * (1 - ratio) + 32 * ratio)
-                    elif level >= 50:
-                        # Gradiente púrpura
-                        r = int(138 * (1 - ratio) + 75 * ratio)
-                        g = int(43 * (1 - ratio) + 0 * ratio)
-                        b = int(226 * (1 - ratio) + 130 * ratio)
-                    else:
-                        # Gradiente azul
-                        r = int(0 * (1 - ratio) + 30 * ratio)
-                        g = int(191 * (1 - ratio) + 144 * ratio)
-                        b = int(255 * (1 - ratio) + 255 * ratio)
-                    
-                    prog_draw.line([(x, 0), (x, bar_height)], fill=(r, g, b, 255))
-                
-                # Máscara para la barra de progreso
-                progress_mask = Image.new('L', (progress_width, bar_height), 0)
-                progress_mask_draw = ImageDraw.Draw(progress_mask)
-                self.draw_rounded_rectangle(
-                    progress_mask_draw,
-                    [0, 0, progress_width, bar_height],
-                    border_radius,
-                    fill=255
-                )
-                
-                progress_img.putalpha(progress_mask)
-                img.paste(progress_img, (bar_x, bar_y), progress_img)
-                
-                # Efecto de brillo
-                highlight_height = bar_height // 2
-                highlight_img = Image.new('RGBA', (progress_width, highlight_height), color=(255, 255, 255, 80))
-                highlight_mask = Image.new('L', (progress_width, highlight_height), 0)
-                highlight_mask_draw = ImageDraw.Draw(highlight_mask)
-                self.draw_rounded_rectangle(
-                    highlight_mask_draw,
-                    [0, 0, progress_width, highlight_height],
-                    border_radius // 2,
-                    fill=255
-                )
-                highlight_img.putalpha(highlight_mask)
-                img.paste(highlight_img, (bar_x, bar_y + 3), highlight_img)
-            
-            # Texto de XP centrado sobre la barra
-            if user_data['level'] >= 200:
-                xp_text = "¡NIVEL MÁXIMO ALCANZADO!"
-                xp_color = (255, 215, 0, 255)  # Dorado
-            else:
-                xp_text = f"{progress_xp:,} / {needed_xp:,} XP"
-                xp_color = (220, 220, 220, 255)  # Gris claro
-            
-            # Calcular posición centrada
-            text_bbox = draw.textbbox((0, 0), xp_text, font=font_small)
-            text_width = text_bbox[2] - text_bbox[0]
-            text_x = bar_x + (bar_width - text_width) // 2
-            text_y = bar_y + (bar_height - (text_bbox[3] - text_bbox[1])) // 2
-            
-            # Sombra del texto
-            draw.text((text_x + 1, text_y + 1), xp_text, font=font_small, fill=(0, 0, 0, 150))
-            # Texto principal
-            draw.text((text_x, text_y), xp_text, font=font_small, fill=xp_color)
-            
-            # Ranking en esquina superior derecha
-            rank_text = f"#{rank}"
-            rank_bbox = draw.textbbox((0, 0), rank_text, font=font_medium)
-            rank_width = rank_bbox[2] - rank_bbox[0]
-            rank_height = rank_bbox[3] - rank_bbox[1]
-            
-            # Posición del ranking
-            rank_x = 800 - rank_width - 40
-            rank_y = 30
-            padding = 12
-            
-            # Fondo del ranking con sombra
-            shadow_x, shadow_y = rank_x - padding + 2, rank_y - padding//2 + 2
-            self.draw_rounded_rectangle(
-                draw,
-                [shadow_x, shadow_y, shadow_x + rank_width + padding*2, shadow_y + rank_height + padding],
-                8,
-                fill=(0, 0, 0, 80)  # Sombra
-            )
-            
-            # Fondo dorado del ranking
-            bg_x, bg_y = rank_x - padding, rank_y - padding//2
-            self.draw_rounded_rectangle(
-                draw,
-                [bg_x, bg_y, bg_x + rank_width + padding*2, bg_y + rank_height + padding],
-                8,
-                fill=(255, 215, 0, 220),  # Dorado semi-transparente
-                outline=(255, 195, 0, 255),
-                width=2
-            )
-            
-            # Texto del ranking
-            draw.text((rank_x, rank_y), rank_text, font=font_medium, fill=(30, 30, 30, 255))  # Negro suave
-            
-            # Información adicional en la parte inferior
-            info_y = bar_y + bar_height + 25
-            
-            # Total de mensajes
-            messages_text = f"Mensajes: {user_data['total_messages']:,}"
-            draw.text((text_start_x + 1, info_y + 1), messages_text, font=font_tiny, fill=(0, 0, 0, 100))  # Sombra
-            draw.text((text_start_x, info_y), messages_text, font=font_tiny, fill=(160, 160, 160, 255))
-            
-            # Progreso hacia nivel máximo (esquina derecha)
-            if user_data['level'] < 200:
-                progress_text = f"{user_data['level']}/200 ({(user_data['level']/200)*100:.1f}%)"
-                progress_bbox = draw.textbbox((0, 0), progress_text, font=font_tiny)
-                progress_width_text = progress_bbox[2] - progress_bbox[0]
-                
-                draw.text((800 - progress_width_text - 39, info_y + 1), progress_text, font=font_tiny, fill=(0, 0, 0, 100))  # Sombra
-                draw.text((800 - progress_width_text - 40, info_y), progress_text, font=font_tiny, fill=(160, 160, 160, 255))
-            
-            # Línea divisoria sutil
-            line_y = info_y - 10
-            draw.line([(text_start_x, line_y), (750, line_y)], fill=(80, 80, 80, 150), width=1)
-            
-            # Convertir a bytes para enviar
-            img_bytes = io.BytesIO()
-            img.save(img_bytes, format='PNG', quality=95)
-            img_bytes.seek(0)
-            
-            return img_bytes
-            
-        except Exception as e:
-            print(f"Error generando imagen de perfil: {e}")
-            return None
-
-class Levels(commands.Cog):
+class LevelsSystem(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.image_generator = ProfileImageGenerator()
-        self.reset_weekly_xp.start()
-        self.reset_monthly_xp.start()
+        self.font_path = "resources/fonts" 
+        self.bg_path = "resources/images/perfil"
         
-        # 🔧 CONFIGURACIÓN PREDEFINIDA - EDITA ESTOS VALORES
-        self.GUILD_CONFIGS = {
-            # Reemplaza GUILD_ID con el ID de tu servidor
-            1400106792196898886: {  # <-- CAMBIA ESTE ID POR EL DE TU SERVIDOR
-                'level_up_channel': 1400106793249538048,  # <-- ID del canal de notificaciones
-                'xp_per_message': 25,  # Aumentado para llegar a nivel 200
-                'xp_cooldown': 60,  # segundos
-                'xp_multiplier': 1.0,
-                'level_formula': 'exponential',  # Optimizada para 200 niveles
-                'enabled_channels': [],  # IDs de canales donde se gana XP (vacío = todos)
-                'disabled_channels': [111111111111111111],  # IDs de canales sin XP
-                'level_roles': {
-                    # Roles cada 10 niveles - Configura los IDs de tus roles aquí
-                    10: 1400106792196898893,   # Rol Nivel 10
-                    20: 1400106792196898894,   # Rol Nivel 20
-                    30: 1400106792196898895,   # Rol Nivel 30
-                    40: 1400106792226127914,   # Rol Nivel 40
-                    50: 1400106792226127915,   # Rol Nivel 50
-                    60: 1400106792226127916,   # Rol Nivel 60
-                    70: 1400106792226127917,   # Rol Nivel 70
-                    80: 1400106792226127918,   # Rol Nivel 80
-                    90: 1400106792226127919,   # Rol Nivel 90
-                    100: 1400106792226127920,  # Rol Nivel 100
-                    110: 1400106792226127921,  # Rol Nivel 110
-                    120: 1400106792226127922,  # Rol Nivel 120
-                    130: 1400106792226127923,  # Rol Nivel 130
-                    140: 1400106792280658061,  # Rol Nivel 140
-                    150: 1400106792280658062,  # Rol Nivel 150
-                    160: 1400106792280658063,  # Rol Nivel 160
-                    170: 1400106792280658064,  # Rol Nivel 170
-                    180: 1400106792280658065,  # Rol Nivel 180
-                    190: 1400106792280658066,  # Rol Nivel 190
-                    200: 1400106792280658067,  # Rol Nivel 200 (Máximo)
-                }
-            },
+        # Canal para anuncios de level up
+        self.level_up_channel_id = 1400106793249538048
+        
+        # Roles por niveles
+        self.level_roles = {
+            10: 1400106792196898893,
+            20: 1400106792196898894,
+            30: 1400106792196898895,
+            40: 1400106792226127914,
+            50: 1400106792226127915,
+            60: 1400106792226127916,
+            70: 1400106792226127917,
+            80: 1400106792226127918,
+            90: 1400106792226127919,
+            100: 1400106792226127920,
+            110: 1400106792226127921,
+            120: 1400106792226127922,
+            130: 1400106792226127923,
+            140: 1400106792280658061,
+            150: 1400106792280658062,
+            160: 1400106792280658063,
+            170: 1400106792280658064,
+            180: 1400106792280658065,
+            190: 1400106792280658066,
+            200: 1400106792280658067
         }
         
-        # Inicializar configuraciones al cargar el cog
-        self.bot.loop.create_task(self.initialize_guild_configs())
+        # Multiplicadores de XP por rol
+        self.xp_multipliers = {}  # {role_id: {'multiplier': float, 'expires': datetime}}
+        
+        # Usuarios activos para dar XP
+        self.active_users = set()
+        
+        # Iniciar tarea de XP automático
+        self.auto_xp_task.start()
+        
+        # Tabla de XP por niveles (de tu documento)
+        self.xp_table = {
+            1: 1000, 2: 1050, 3: 1100, 4: 1150, 5: 1200, 6: 1250, 7: 1300, 8: 1355,
+            9: 1405, 10: 1455, 11: 1505, 12: 1555, 13: 1605, 14: 1660, 15: 1710,
+            16: 1760, 17: 1810, 18: 1860, 19: 1910, 20: 1960, 21: 2010, 22: 2060,
+            23: 2110, 24: 2160, 25: 2210, 26: 2260, 27: 2310, 28: 2360, 29: 2410,
+            30: 2460, 31: 2510, 32: 2560, 33: 2610, 34: 2660, 35: 2710, 36: 2760,
+            37: 2810, 38: 2860, 39: 2910, 40: 2960, 41: 3010, 42: 3060, 43: 3110,
+            44: 3160, 45: 3210, 46: 3275, 47: 3325, 48: 3375, 49: 3425, 50: 3475,
+            51: 3525, 52: 3575, 53: 3625, 54: 3675, 55: 3725, 56: 3775, 57: 3825,
+            58: 3875, 59: 3925, 60: 3975, 61: 4025, 62: 4075, 63: 4125, 64: 4175,
+            65: 4225, 66: 4275, 67: 4325, 68: 4375, 69: 4425, 70: 4475, 71: 4525,
+            72: 4575, 73: 4625, 74: 4675, 75: 4725, 76: 4775, 77: 4825, 78: 4875,
+            79: 4925, 80: 4975, 81: 5025, 82: 5075, 83: 5125, 84: 5175, 85: 5225,
+            86: 5275, 87: 5325, 88: 5375, 89: 5425, 90: 5475, 91: 5525, 92: 5575,
+            93: 5625, 94: 5675, 95: 5725, 96: 5775, 97: 5825, 98: 5875, 99: 5925,
+            100: 5975, 101: 6025, 102: 6075, 103: 6125, 104: 6175, 105: 6225,
+            106: 6275, 107: 6325, 108: 6375, 109: 6425, 110: 6475, 111: 6525,
+            112: 6575, 113: 6625, 114: 6675, 115: 6725, 116: 6775, 117: 6825,
+            118: 6875, 119: 6925, 120: 6975, 121: 7025, 122: 7075, 123: 7125,
+            124: 7175, 125: 7225, 126: 7275, 127: 7325, 128: 7375, 129: 7425,
+            130: 7475, 131: 7525, 132: 7575, 133: 7625, 134: 7675, 135: 7725,
+            136: 7775, 137: 7825, 138: 7875, 139: 7925, 140: 7975, 141: 8025,
+            142: 8075, 143: 8125, 144: 8175, 145: 8225, 146: 8275, 147: 8325,
+            148: 8375, 149: 8425, 150: 8475, 151: 8525, 152: 8575, 153: 8625,
+            154: 8675, 155: 8725, 156: 8775, 157: 8825, 158: 8875, 159: 8925,
+            160: 8975, 161: 9025, 162: 9075, 163: 9125, 164: 9175, 165: 9225,
+            166: 9275, 167: 9325, 168: 9375, 169: 9425, 170: 9475, 171: 9525,
+            172: 9575, 173: 9625, 174: 9675, 175: 9725, 176: 9775, 177: 9825,
+            178: 9875, 179: 9925, 180: 9975, 181: 10025, 182: 10075, 183: 10125,
+            184: 10175, 185: 10225, 186: 10275, 187: 10325, 188: 10375, 189: 10425,
+            190: 10475, 191: 10525, 192: 10575, 193: 10625, 194: 10675, 195: 10725,
+            196: 10775, 197: 10825, 198: 10875, 199: 10925, 200: 11675
+        }
+        
+        # XP acumulada por nivel
+        self.cumulative_xp = {}
+        self._calculate_cumulative_xp()
+    
+    def _calculate_cumulative_xp(self):
+        """Calcula la XP acumulada para cada nivel"""
+        total = 0
+        for level in range(1, 201):
+            if level > 1:
+                total += self.xp_table.get(level - 1, 0)
+            self.cumulative_xp[level] = total
     
     def cog_unload(self):
-        self.reset_weekly_xp.cancel()
-        self.reset_monthly_xp.cancel()
+        """Detiene las tareas al descargar el cog"""
+        self.auto_xp_task.cancel()
     
-    async def initialize_guild_configs(self):
-        """Inicializa las configuraciones predefinidas en la base de datos"""
-        await self.bot.wait_until_ready()
-        
-        for guild_id, config in self.GUILD_CONFIGS.items():
-            # Verificar si el servidor existe
-            guild = self.bot.get_guild(guild_id)
-            if not guild:
-                print(f"⚠️ Servidor con ID {guild_id} no encontrado")
-                continue
-            
-            print(f"🔧 Configurando servidor: {guild.name}")
-            
-            # Configurar ajustes básicos del servidor
-            await database.update_guild_config(
-                guild_id,
-                level_up_channel=config['level_up_channel'],
-                xp_per_message=config['xp_per_message'],
-                xp_cooldown=config['xp_cooldown'],
-                enabled_channels=config['enabled_channels'],
-                disabled_channels=config['disabled_channels'],
-                xp_multiplier=config['xp_multiplier'],
-                level_formula=config['level_formula']
-            )
-            
-            # Configurar roles por nivel
-            for level, role_id in config['level_roles'].items():
-                # Verificar que el rol existe
-                role = guild.get_role(role_id)
-                if role:
-                    await database.set_level_role(guild_id, level, role_id)
-            
-            # Verificar canal de notificaciones
-            channel = guild.get_channel(config['level_up_channel'])
-            if channel:
-                print(f"  ✅ Canal de notificaciones: {channel.name}")
-            else:
-                print(f"  ❌ Canal con ID {config['level_up_channel']} no encontrado")
-            
-            print(f"✅ Configuración completada para {guild.name}\n")
-    
-    def get_predefined_config(self, guild_id):
-        """Obtiene la configuración predefinida para un servidor"""
-        return self.GUILD_CONFIGS.get(guild_id, {
-            'level_up_channel': None,
-            'xp_per_message': 15,
-            'xp_cooldown': 60,
-            'enabled_channels': [],
-            'disabled_channels': [],
-            'xp_multiplier': 1.0,
-            'level_formula': 'exponential',
-            'level_roles': {}
-        })
-    
-    @tasks.loop(hours=168)  # Cada semana
-    async def reset_weekly_xp(self):
-        """Resetea la XP semanal"""
-        await database.reset_weekly_xp()
-    
-    @tasks.loop(hours=720)  # Cada mes (30 días)
-    async def reset_monthly_xp(self):
-        """Resetea la XP mensual"""
-        await database.reset_monthly_xp()
+    # ================== EVENTOS ==================
     
     @commands.Cog.listener()
     async def on_message(self, message):
-        """Listener para mensajes - otorga XP"""
-        if message.author.bot or not message.guild:
+        """Registra usuarios activos para dar XP"""
+        if message.author.bot:
             return
         
-        # Usar configuración predefinida si existe, sino la de la base de datos
-        predefined_config = self.get_predefined_config(message.guild.id)
-        if predefined_config and predefined_config.get('level_up_channel'):
-            guild_config = predefined_config
-        else:
-            guild_config = await database.get_guild_level_config(message.guild.id)
-        
-        # Verificar si el canal está habilitado para XP
-        if guild_config['enabled_channels'] and message.channel.id not in guild_config['enabled_channels']:
-            return
-        
-        if message.channel.id in guild_config['disabled_channels']:
-            return
-        
-        user_data = await database.get_user_level_data(message.author.id, message.guild.id)
-        current_time = int(time.time())
-        
-        # Verificar cooldown
-        if user_data and current_time - user_data['last_xp_time'] < guild_config['xp_cooldown']:
-            return
-        
-        # Calcular XP a otorgar
-        base_xp = guild_config['xp_per_message']
-        xp_gain = int(base_xp * guild_config['xp_multiplier'])
-        
-        # Actualizar XP
-        await database.update_user_xp(message.author.id, message.guild.id, xp_gain, xp_gain, xp_gain)
-        
-        # Verificar subida de nivel
-        updated_data = await database.get_user_level_data(message.author.id, message.guild.id)
-        new_level = LevelCalculator.calculate_level(updated_data['xp'], guild_config['level_formula'])
-        
-        if new_level > updated_data['level']:
-            await database.update_user_level(message.author.id, message.guild.id, new_level)
-            await self.handle_level_up(message.author, message.guild, new_level, guild_config)
+        # Agregar usuario a la lista de activos
+        self.active_users.add((message.author.id, message.guild.id))
     
-    async def handle_level_up(self, user, guild, new_level, guild_config):
-        """Maneja la subida de nivel de un usuario"""
-        # Determinar si es un nivel especial (cada 10 niveles)
-        is_role_level = new_level % 10 == 0
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        """Registra usuarios activos en canales de voz"""
+        if member.bot:
+            return
         
-        # Enviar notificación
-        if guild_config['level_up_channel']:
-            channel = guild.get_channel(guild_config['level_up_channel'])
-            if channel:
-                embed = discord.Embed(
-                    title="🎉 ¡Subida de Nivel!",
-                    description=f"{user.mention} ha subido al **nivel {new_level}/200**!",
-                    color=0x00ff00
-                )
+        # Si se unió a un canal de voz, agregarlo a activos
+        if after.channel and not before.channel:
+            self.active_users.add((member.id, member.guild.id))
+    
+    # ================== TAREAS AUTOMÁTICAS ==================
+    
+    @tasks.loop(minutes=1)
+    async def auto_xp_task(self):
+        """Tarea que da XP automáticamente cada minuto"""
+        if not self.active_users:
+            return
+        
+        # Copiar y limpiar la lista de usuarios activos
+        users_to_reward = list(self.active_users)
+        self.active_users.clear()
+        
+        for user_id, guild_id in users_to_reward:
+            try:
+                guild = self.bot.get_guild(guild_id)
+                if not guild:
+                    continue
                 
-                # Agregar información especial para niveles con roles
-                if is_role_level:
-                    embed.add_field(name="🏆 ¡Rol Desbloqueado!", value=f"¡Has desbloqueado un nuevo rol por alcanzar el nivel {new_level}!", inline=False)
-                    embed.color = 0xffd700  # Color dorado para niveles especiales
+                member = guild.get_member(user_id)
+                if not member or member.bot:
+                    continue
                 
-                # Mostrar progreso hacia nivel 200
-                if new_level == 200:
-                    embed.add_field(name="👑 NIVEL MÁXIMO", value="¡Has alcanzado el nivel máximo del servidor!", inline=False)
-                    embed.color = 0xff0000  # Color rojo para nivel máximo
-                else:
-                    progress_percentage = (new_level / 200) * 100
-                    embed.add_field(name="📊 Progreso Global", value=f"{progress_percentage:.1f}% hacia el nivel máximo (200)", inline=False)
+                # Generar XP aleatoria (5-50 en múltiplos de 5)
+                base_xp = random.choice([5, 10, 15, 20, 25, 30, 35, 40, 45, 50])
                 
-                embed.set_thumbnail(url=user.display_avatar.url)
-                await channel.send(embed=embed)
-        
-        # Manejar roles por nivel usando configuración predefinida
-        predefined_config = self.get_predefined_config(guild.id)
-        level_roles = predefined_config.get('level_roles', {})
-        
-        # Si no hay configuración predefinida, usar la de la base de datos
-        if not level_roles:
-            level_roles = await database.get_level_roles(guild.id)
-        
-        if new_level in level_roles:
-            role = guild.get_role(level_roles[new_level])
-            if role:
-                # Remover roles de niveles anteriores (solo roles cada 10 niveles)
-                for level in range(10, new_level, 10):  # 10, 20, 30... hasta new_level-10
-                    if level in level_roles:
-                        old_role = guild.get_role(level_roles[level])
-                        if old_role and old_role in user.roles:
-                            await user.remove_roles(old_role)
-                            print(f"🔄 Removido rol {old_role.name} de {user.display_name}")
+                # Aplicar multiplicadores de rol
+                multiplier = 1.0
+                for role in member.roles:
+                    if role.id in self.xp_multipliers:
+                        mult_data = self.xp_multipliers[role.id]
+                        if datetime.now() < mult_data['expires']:
+                            multiplier = max(multiplier, mult_data['multiplier'])
+                        else:
+                            # Eliminar multiplicador expirado
+                            del self.xp_multipliers[role.id]
                 
-                # Agregar nuevo rol
-                await user.add_roles(role)
-                print(f"✅ Agregado rol {role.name} a {user.display_name} (Nivel {new_level})")
+                final_xp = int(base_xp * multiplier)
                 
-                # Notificar por DM si es necesario
-                try:
-                    embed = discord.Embed(
-                        title="🔓 Contenido Desbloqueado",
-                        description=f"¡Has alcanzado el nivel {new_level} y has desbloqueado el rol **{role.name}**!",
-                        color=0x00ff00
-                    )
-                    
-                    # Información adicional para nivel máximo
-                    if new_level == 200:
-                        embed.add_field(name="👑 ¡Felicitaciones!", value="Has alcanzado el nivel máximo del servidor. ¡Eres una leyenda!", inline=False)
-                    
-                    await user.send(embed=embed)
-                except:
-                    pass  # El usuario tiene los DMs cerrados
+                # Agregar XP y verificar level up
+                await self.add_xp_and_check_levelup(member, final_xp)
+                
+            except Exception as e:
+                print(f"Error dando XP automática a {user_id}: {e}")
     
-    @commands.command(name="help_levels", aliases=["ayuda_niveles", "niveles_help"])
-    async def help_levels(self, ctx):
-        """Muestra ayuda completa sobre el sistema de niveles"""
-        embed = discord.Embed(
-            title="📚 Sistema de Niveles - Guía Completa",
-            description="Sistema completo de niveles con ranking, roles automáticos y estadísticas.",
-            color=0x00ffff
-        )
-        
-        # Comandos de Usuario
-        embed.add_field(
-            name="👤 Comandos de Usuario",
-            value=(
-                "`!perfil [@usuario]` - Ver perfil con imagen personalizada\n"
-                "`!xp [@usuario]` - Ver XP actual y progreso\n"
-                "`!top [límite] [@usuario]` - Ranking general por XP\n"
-                "`!top_semanal [límite]` - Ranking de la semana\n"
-                "`!top_mensual [límite]` - Ranking del mes\n"
-                "`!insignias [@usuario]` - Ver insignias obtenidas"
-            ),
-            inline=False
-        )
-        
-        # Comandos de Administrador - Configuración
-        embed.add_field(
-            name="⚙️ Comandos de Admin - Configuración",
-            value=(
-                "`!config_canal_nivel [#canal]` - Canal de notificaciones\n"
-                "`!config_nivel <nivel> @rol` - Asignar rol a nivel\n"
-                "`!config_xp [xp] [cooldown] [mult]` - Configurar parámetros XP\n"
-                "`!enable_xp_channel [#canal]` - Habilitar canal para XP\n"
-                "`!disable_xp_channel [#canal]` - Deshabilitar canal para XP\n"
-                "`!show_config` - Ver configuración actual\n"
-                "`!reload_config` - Recargar configuración predefinida"
-            ),
-            inline=False
-        )
-        
-        # Comandos de Administrador - Gestión
-        embed.add_field(
-            name="🛠️ Comandos de Admin - Gestión",
-            value=(
-                "`!set_xp @usuario <cantidad>` - Establecer XP exacta\n"
-                "`!add_xp @usuario <cantidad>` - Agregar XP\n"
-                "`!set_level @usuario <nivel>` - Establecer nivel exacto\n"
-                "`!reset_weekly` - Resetear estadísticas semanales\n"
-                "`!reset_monthly` - Resetear estadísticas mensuales\n"
-                "`!levels_stats` - Ver estadísticas del servidor"
-            ),
-            inline=False
-        )
-        
-        # Comandos de Eventos
-        embed.add_field(
-            name="🎉 Comandos de Eventos",
-            value=(
-                "`!multiplier_event <mult> <horas>` - Evento XP temporal\n"
-                "`!import_levels` - Importar datos (en desarrollo)"
-            ),
-            inline=False
-        )
-        
-        # Información del Sistema
-        embed.add_field(
-            name="📊 Información del Sistema",
-            value=(
-                "**Niveles:** 1-200 (nivel máximo)\n"
-                "**XP por mensaje:** Configurable (predeterminado: 15-25)\n"
-                "**Cooldown:** 60 segundos entre mensajes\n"
-                "**Roles:** Se otorgan cada 10 niveles (10, 20, 30...)\n"
-                "**Rankings:** Total, semanal y mensual\n"
-                "**Imágenes:** Perfil personalizado con estadísticas"
-            ),
-            inline=False
-        )
-        
-        # Cómo Funciona
-        embed.add_field(
-            name="🔄 Cómo Funciona",
-            value=(
-                "• Envía mensajes para ganar XP automáticamente\n"
-                "• Sube de nivel para desbloquear roles especiales\n"
-                "• Compite en rankings semanales y mensuales\n"
-                "• Obtén insignias por logros especiales\n"
-                "• Los administradores pueden configurar todo\n"
-                "• Sistema optimizado para 200 niveles máximo"
-            ),
-            inline=False
-        )
-        
-        embed.set_footer(text="💡 Usa !perfil para ver tu progreso actual | Sistema de Niveles v2.0")
-        
-        await ctx.send(embed=embed) 
-
-    @commands.command(name="perfill", aliases=["profilee"])
-    async def perfill(self, ctx, user: discord.Member = None):
-        """Muestra el perfil de un usuario"""
-        if user is None:
-            user = ctx.author
-        
-        user_data = await database.get_user_level_data(user.id, ctx.guild.id)
-        if not user_data:
-            embed = discord.Embed(
-                title="❌ Error",
-                description="Este usuario no tiene datos registrados.",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed)
-            return
-        
-        # Recalcular nivel por si acaso
-        guild_config = await database.get_guild_level_config(ctx.guild.id)
-        calculated_level = LevelCalculator.calculate_level(user_data['xp'], guild_config['level_formula'])
-        if calculated_level != user_data['level']:
-            await database.update_user_level(user.id, ctx.guild.id, calculated_level)
-            user_data['level'] = calculated_level
-        
-        rank = await database.get_user_rank(user.id, ctx.guild.id)
-        
-        # Generar imagen de perfil
-        profile_image = await self.image_generator.generate_profile_image(user, user_data, rank)
-        
-        if profile_image:
-            file = discord.File(profile_image, filename="perfil.png")
-            embed = discord.Embed(color=0x00ffff)
-            embed.set_image(url="attachment://perfil.png")
-            await ctx.send(embed=embed, file=file)
-        else:
-            # Fallback a embed de texto
-            current_level_xp = LevelCalculator.calculate_xp_for_level(user_data['level'])
-            next_level_xp = LevelCalculator.calculate_xp_for_level(user_data['level'] + 1)
-            progress_xp = user_data['xp'] - current_level_xp
-            needed_xp = next_level_xp - current_level_xp
-            
-            embed = discord.Embed(
-                title=f"📊 Perfil de {user.display_name}",
-                color=0x00ffff
-            )
-            embed.add_field(name="Nivel", value=user_data['level'], inline=True)
-            embed.add_field(name="Ranking", value=f"#{rank}", inline=True)
-            embed.add_field(name="XP Total", value=user_data['xp'], inline=True)
-            embed.add_field(name="Progreso", value=f"{progress_xp}/{needed_xp} XP", inline=False)
-            embed.set_thumbnail(url=user.display_avatar.url)
-            await ctx.send(embed=embed)
+    @auto_xp_task.before_loop
+    async def before_auto_xp_task(self):
+        """Espera a que el bot esté listo"""
+        await self.bot.wait_until_ready()
     
-    @commands.command(name="top", aliases=["leaderboard", "ranking"])
-    async def top(self, ctx, limit: int = 10, user: discord.Member = None):
-        """Muestra el top de usuarios por XP"""
-        if user:
-            # Mostrar posición específica del usuario
-            user_data = await database.get_user_level_data(user.id, ctx.guild.id)
-            if not user_data:
-                await ctx.send("❌ Este usuario no tiene datos registrados.")
-                return
-            
-            rank = await database.get_user_rank(user.id, ctx.guild.id)
-            embed = discord.Embed(
-                title=f"📊 Posición de {user.display_name}",
-                description=f"**#{rank}** - Nivel {user_data['level']} ({user_data['xp']} XP)",
-                color=0x00ffff
-            )
-            embed.set_thumbnail(url=user.display_avatar.url)
-            await ctx.send(embed=embed)
-            return
-        
-        # Mostrar leaderboard general
-        leaderboard = await database.get_levels_leaderboard(ctx.guild.id, min(limit, 20))
-        
-        if not leaderboard:
-            await ctx.send("❌ No hay datos de usuarios registrados.")
-            return
-        
-        embed = discord.Embed(
-            title="🏆 Top de Usuarios",
-            color=0x00ffff
-        )
-        
-        description = ""
-        for i, (user_id, xp, level, _, _, _) in enumerate(leaderboard, 1):
-            user = ctx.guild.get_member(user_id)
-            if user:
-                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"**{i}.**"
-                description += f"{medal} {user.display_name} - Nivel {level} ({xp:,} XP)\n"
-        
-        embed.description = description
-        await ctx.send(embed=embed)
+    # ================== FUNCIONES AUXILIARES ==================
     
-    @commands.command(name="top_semanal", aliases=["top_weekly"])
-    async def top_semanal(self, ctx, limit: int = 10):
-        """Muestra el top semanal"""
-        leaderboard = await database.get_levels_leaderboard(ctx.guild.id, min(limit, 20), 'weekly')
+    def get_level_from_total_xp(self, total_xp: int) -> tuple:
+        """Obtiene el nivel actual y XP necesaria para el siguiente nivel"""
+        current_level = 1
         
-        if not leaderboard:
-            await ctx.send("❌ No hay datos semanales registrados.")
-            return
-        
-        embed = discord.Embed(
-            title="🏆 Top Semanal",
-            color=0x00ff00
-        )
-        
-        description = ""
-        for i, (user_id, _, _, weekly_xp, _, _) in enumerate(leaderboard, 1):
-            user = ctx.guild.get_member(user_id)
-            if user and weekly_xp > 0:
-                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"**{i}.**"
-                description += f"{medal} {user.display_name} - {weekly_xp:,} XP esta semana\n"
-        
-        embed.description = description if description else "No hay actividad esta semana."
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="top_mensual", aliases=["top_monthly"])
-    async def top_mensual(self, ctx, limit: int = 10):
-        """Muestra el top mensual"""
-        leaderboard = await database.get_levels_leaderboard(ctx.guild.id, min(limit, 20), 'monthly')
-        
-        if not leaderboard:
-            await ctx.send("❌ No hay datos mensuales registrados.")
-            return
-        
-        embed = discord.Embed(
-            title="🏆 Top Mensual",
-            color=0xff6600
-        )
-        
-        description = ""
-        for i, (user_id, _, _, monthly_xp, _, _) in enumerate(leaderboard, 1):
-            user = ctx.guild.get_member(user_id)
-            if user and monthly_xp > 0:
-                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"**{i}.**"
-                description += f"{medal} {user.display_name} - {monthly_xp:,} XP este mes\n"
-        
-        embed.description = description if description else "No hay actividad este mes."
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="xp")
-    async def xp(self, ctx, user: discord.Member = None):
-        """Muestra la XP actual y progreso de un usuario"""
-        if user is None:
-            user = ctx.author
-        
-        user_data = await database.get_user_level_data(user.id, ctx.guild.id)
-        if not user_data:
-            embed = discord.Embed(
-                title="❌ Error",
-                description="Este usuario no tiene datos registrados.",
-                color=0xff0000
-            )
-            await ctx.send(embed=embed)
-            return
-        
-        guild_config = await database.get_guild_level_config(ctx.guild.id)
-        current_level_xp = LevelCalculator.calculate_xp_for_level(user_data['level'], guild_config['level_formula'])
-        
-        # Verificar si ya está en nivel máximo
-        if user_data['level'] >= 200:
-            embed = discord.Embed(
-                title=f"💎 XP de {user.display_name}",
-                color=0xffd700
-            )
-            embed.add_field(name="Nivel Actual", value="200 (MÁXIMO)", inline=True)
-            embed.add_field(name="XP Total", value=f"{user_data['xp']:,}", inline=True)
-            embed.add_field(name="Estado", value="🏆 **¡Nivel Máximo Alcanzado!**", inline=True)
-            embed.set_thumbnail(url=user.display_avatar.url)
-            await ctx.send(embed=embed)
-            return
-        
-        next_level_xp = LevelCalculator.calculate_xp_for_level(user_data['level'] + 1, guild_config['level_formula'])
-        progress_xp = user_data['xp'] - current_level_xp
-        needed_xp = next_level_xp - user_data['xp']
-        
-        # Verificar si el siguiente nivel otorga un rol
-        next_role_level = None
-        for level in range(user_data['level'] + 1, 201, 10):
-            if level % 10 == 0:
-                next_role_level = level
+        # Encontrar el nivel actual
+        for level in range(1, 201):
+            if total_xp < self.cumulative_xp.get(level + 1, float('inf')):
+                current_level = level
                 break
         
+        # XP actual en el nivel
+        current_level_start_xp = self.cumulative_xp.get(current_level, 0)
+        current_xp_in_level = total_xp - current_level_start_xp
+        
+        # XP necesaria para el siguiente nivel
+        next_level_xp = self.xp_table.get(current_level, 0)
+        
+        return current_level, current_xp_in_level, next_level_xp
+    
+    def get_total_xp_for_level(self, level: int) -> int:
+        """Obtiene la XP total necesaria para alcanzar un nivel"""
+        return self.cumulative_xp.get(level, 0)
+    
+    async def add_xp_and_check_levelup(self, member: discord.Member, xp_amount: int):
+        """Agrega XP a un usuario y verifica si subió de nivel"""
+        try:
+            # Obtener datos actuales del usuario
+            user_data = await get_user_level_data(member.id, member.guild.id)
+            if not user_data:
+                return
+            
+            old_total_xp = user_data['xp']
+            old_level, _, _ = self.get_level_from_total_xp(old_total_xp)
+            
+            # Agregar XP
+            new_total_xp = old_total_xp + xp_amount
+            await add_user_xp(member.id, member.guild.id, xp_amount)
+            
+            # Verificar nuevo nivel
+            new_level, _, _ = self.get_level_from_total_xp(new_total_xp)
+            
+            # Si subió de nivel
+            if new_level > old_level:
+                await self.handle_level_up(member, new_level, old_level)
+                
+        except Exception as e:
+            print(f"Error en add_xp_and_check_levelup: {e}")
+    
+    async def handle_level_up(self, member: discord.Member, new_level: int, old_level: int):
+        """Maneja la subida de nivel de un usuario"""
+        try:
+            # Obtener canal de anuncios
+            channel = self.bot.get_channel(self.level_up_channel_id)
+            if not channel:
+                return
+            
+            # Verificar si es múltiplo de 10
+            is_milestone = new_level % 10 == 0
+            
+            if is_milestone:
+                # Mensaje con mención en niveles múltiplos de 10
+                embed = discord.Embed(
+                    title="🎉 ¡NIVEL ALCANZADO!",
+                    description=f"{member.mention} ha alcanzado el **nivel {new_level}**!",
+                    color=0x00ffff
+                )
+                
+                # Asignar rol correspondiente
+                await self.assign_level_role(member, new_level)
+                
+            else:
+                # Mensaje sin mención en otros niveles
+                embed = discord.Embed(
+                    title="⬆️ Subida de nivel",
+                    description=f"**{member.display_name}** ha alcanzado el nivel **{new_level}**",
+                    color=0x0099ff
+                )
+            
+            embed.set_thumbnail(url=member.display_avatar.url)
+            embed.add_field(name="Nivel anterior", value=str(old_level), inline=True)
+            embed.add_field(name="Nivel actual", value=str(new_level), inline=True)
+            
+            await channel.send(embed=embed)
+            
+        except Exception as e:
+            print(f"Error en handle_level_up: {e}")
+    
+    async def assign_level_role(self, member: discord.Member, level: int):
+        """Asigna el rol correspondiente al nivel y elimina el anterior"""
+        try:
+            if level not in self.level_roles:
+                return
+            
+            new_role_id = self.level_roles[level]
+            new_role = member.guild.get_role(new_role_id)
+            
+            if not new_role:
+                print(f"No se encontró el rol {new_role_id} para el nivel {level}")
+                return
+            
+            # Eliminar roles de niveles anteriores
+            roles_to_remove = []
+            for role in member.roles:
+                if role.id in self.level_roles.values() and role.id != new_role_id:
+                    roles_to_remove.append(role)
+            
+            # Remover roles antiguos
+            if roles_to_remove:
+                await member.remove_roles(*roles_to_remove, reason=f"Actualización de nivel a {level}")
+            
+            # Agregar nuevo rol
+            await member.add_roles(new_role, reason=f"Alcanzó el nivel {level}")
+            
+            print(f"Asignado rol de nivel {level} a {member.display_name}")
+            
+        except Exception as e:
+            print(f"Error asignando rol de nivel: {e}")
+    
+    # ================== COMANDOS DE ADMINISTRACIÓN ==================
+    
+    @commands.group(name="xp", invoke_without_command=True)
+    @commands.has_permissions(manage_guild=True)
+    async def xp_commands(self, ctx):
+        """Comandos para gestionar XP"""
         embed = discord.Embed(
-            title=f"💎 XP de {user.display_name}",
+            title="🎮 Comandos de XP",
+            description="Comandos disponibles para gestionar experiencia:",
             color=0x00ffff
         )
-        embed.add_field(name="Nivel Actual", value=f"{user_data['level']}/200", inline=True)
-        embed.add_field(name="XP Total", value=f"{user_data['xp']:,}", inline=True)
-        embed.add_field(name="Progreso", value=f"{progress_xp:,}/{next_level_xp - current_level_xp:,}", inline=True)
-        embed.add_field(name="Para Siguiente Nivel", value=f"Te faltan **{needed_xp:,} XP** para subir de nivel", inline=False)
-        
-        if next_role_level:
-            embed.add_field(name="🎯 Próximo Rol", value=f"Nivel {next_role_level}", inline=True)
-        
-        embed.set_thumbnail(url=user.display_avatar.url)
-        
-        await ctx.send(embed=embed)
-    
-    # Comandos Administrativos
-    @commands.command(name="set_xp")
-    @commands.has_permissions(administrator=True)
-    async def set_xp(self, ctx, user: discord.Member, xp: int):
-        """Establece la XP exacta de un usuario"""
-        if xp < 0:
-            await ctx.send("❌ La XP no puede ser negativa.")
-            return
-        
-        await database.set_user_xp(user.id, ctx.guild.id, xp)
-        
-        # Recalcular nivel
-        guild_config = await database.get_guild_level_config(ctx.guild.id)
-        new_level = LevelCalculator.calculate_level(xp, guild_config['level_formula'])
-        await database.update_user_level(user.id, ctx.guild.id, new_level)
-        
-        embed = discord.Embed(
-            title="✅ XP Establecida",
-            description=f"Se ha establecido la XP de {user.mention} a **{xp:,} XP** (Nivel {new_level})",
-            color=0x00ff00
+        embed.add_field(
+            name="📈 Agregar XP",
+            value="`!xp add <usuario> <cantidad>`",
+            inline=False
+        )
+        embed.add_field(
+            name="📉 Quitar XP",
+            value="`!xp remove <usuario> <cantidad>`",
+            inline=False
+        )
+        embed.add_field(
+            name="📝 Establecer XP",
+            value="`!xp set <usuario> <cantidad>`",
+            inline=False
+        )
+        embed.add_field(
+            name="🏆 Establecer Nivel",
+            value="`!xp setlevel <usuario> <nivel>`",
+            inline=False
+        )
+        embed.add_field(
+            name="⚡ Multiplicador de Rol",
+            value="`!xp multiplier <rol> <multiplicador> <horas>`",
+            inline=False
         )
         await ctx.send(embed=embed)
     
-    @commands.command(name="add_xp")
-    @commands.has_permissions(administrator=True)
-    async def add_xp(self, ctx, user: discord.Member, xp: int):
+    @xp_commands.command(name="add")
+    @commands.has_permissions(manage_guild=True)
+    async def add_xp_command(self, ctx, member: discord.Member, amount: int):
         """Agrega XP a un usuario"""
-        user_data = await database.get_user_level_data(user.id, ctx.guild.id)
-        if not user_data:
-            # Crear usuario si no existe
-            await database.update_user_xp(user.id, ctx.guild.id, 0)
-            user_data = await database.get_user_level_data(user.id, ctx.guild.id)
-        
-        old_level = user_data['level']
-        await database.update_user_xp(user.id, ctx.guild.id, xp)
-        
-        # Verificar subida de nivel
-        updated_data = await database.get_user_level_data(user.id, ctx.guild.id)
-        guild_config = await database.get_guild_level_config(ctx.guild.id)
-        new_level = LevelCalculator.calculate_level(updated_data['xp'], guild_config['level_formula'])
-        
-        if new_level != old_level:
-            await database.update_user_level(user.id, ctx.guild.id, new_level)
-            if new_level > old_level:
-                await self.handle_level_up(user, ctx.guild, new_level, guild_config)
-        
-        embed = discord.Embed(
-            title="✅ XP Agregada",
-            description=f"Se han agregado **{xp:,} XP** a {user.mention}\nNuevo total: **{updated_data['xp']:,} XP** (Nivel {new_level})",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="set_level")
-    @commands.has_permissions(administrator=True)
-    async def set_level(self, ctx, user: discord.Member, level: int):
-        """Establece el nivel exacto de un usuario"""
-        if level < 1 or level > 200:
-            await ctx.send("❌ El nivel debe estar entre 1 y 200.")
-            return
-        
-        guild_config = await database.get_guild_level_config(ctx.guild.id)
-        required_xp = LevelCalculator.calculate_xp_for_level(level, guild_config['level_formula'])
-        
-        await database.set_user_xp(user.id, ctx.guild.id, required_xp)
-        await database.update_user_level(user.id, ctx.guild.id, level)
-        
-        embed = discord.Embed(
-            title="✅ Nivel Establecido",
-            description=f"Se ha establecido el nivel de {user.mention} a **{level}/200** ({required_xp:,} XP)",
-            color=0x00ff00
-        )
-        
-        # Mostrar si obtiene un rol
-        if level % 10 == 0:
-            embed.add_field(name="🎉 Rol Desbloqueado", value=f"Este nivel otorga un rol especial!", inline=False)
-        
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="config_nivel")
-    @commands.has_permissions(administrator=True)
-    async def config_nivel(self, ctx, level: int, role: discord.Role):
-        """Configura un rol para un nivel específico"""
-        if level < 1:
-            await ctx.send("❌ El nivel debe ser mayor a 0.")
-            return
-        
-        await database.set_level_role(ctx.guild.id, level, role.id)
-        
-        embed = discord.Embed(
-            title="✅ Rol de Nivel Configurado",
-            description=f"El rol {role.mention} se otorgará al alcanzar el **nivel {level}**",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="config_canal_nivel")
-    @commands.has_permissions(administrator=True)
-    async def config_canal_nivel(self, ctx, channel: discord.TextChannel = None):
-        """Configura el canal de notificaciones de subida de nivel"""
-        if channel is None:
-            channel = ctx.channel
-        
-        await database.update_guild_config(ctx.guild.id, level_up_channel=channel.id)
-        
-        embed = discord.Embed(
-            title="✅ Canal Configurado",
-            description=f"Las notificaciones de subida de nivel se enviarán a {channel.mention}",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="config_xp")
-    @commands.has_permissions(administrator=True)
-    async def config_xp(self, ctx, xp_per_message: int = None, cooldown: int = None, multiplier: float = None):
-        """Configura los parámetros de XP del servidor"""
-        guild_config = await database.get_guild_level_config(ctx.guild.id)
-        
-        if xp_per_message is None and cooldown is None and multiplier is None:
-            embed = discord.Embed(
-                title="⚙️ Configuración Actual de XP",
-                color=0x00ffff
-            )
-            embed.add_field(name="XP por Mensaje", value=guild_config['xp_per_message'], inline=True)
-            embed.add_field(name="Cooldown", value=f"{guild_config['xp_cooldown']}s", inline=True)
-            embed.add_field(name="Multiplicador", value=f"{guild_config['xp_multiplier']}x", inline=True)
-            embed.add_field(name="Fórmula", value=guild_config['level_formula'], inline=True)
-            await ctx.send(embed=embed)
-            return
-        
-        # Actualizar valores proporcionados
-        update_data = {}
-        if xp_per_message is not None:
-            update_data['xp_per_message'] = xp_per_message
-        if cooldown is not None:
-            update_data['xp_cooldown'] = cooldown
-        if multiplier is not None:
-            update_data['xp_multiplier'] = multiplier
-        
-        await database.update_guild_config(ctx.guild.id, **update_data)
-        
-        embed = discord.Embed(
-            title="✅ Configuración Actualizada",
-            color=0x00ff00
-        )
-        if xp_per_message is not None:
-            embed.add_field(name="XP por Mensaje", value=xp_per_message, inline=True)
-        if cooldown is not None:
-            embed.add_field(name="Cooldown", value=f"{cooldown}s", inline=True)
-        if multiplier is not None:
-            embed.add_field(name="Multiplicador", value=f"{multiplier}x", inline=True)
-        
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="enable_xp_channel")
-    @commands.has_permissions(administrator=True)
-    async def enable_xp_channel(self, ctx, channel: discord.TextChannel = None):
-        """Habilita un canal para ganar XP"""
-        if channel is None:
-            channel = ctx.channel
-        
-        guild_config = await database.get_guild_level_config(ctx.guild.id)
-        enabled_channels = guild_config['enabled_channels']
-        
-        if channel.id not in enabled_channels:
-            enabled_channels.append(channel.id)
-            await database.update_guild_config(ctx.guild.id, enabled_channels=enabled_channels)
-        
-        embed = discord.Embed(
-            title="✅ Canal Habilitado",
-            description=f"Los usuarios pueden ganar XP en {channel.mention}",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="disable_xp_channel")
-    @commands.has_permissions(administrator=True)
-    async def disable_xp_channel(self, ctx, channel: discord.TextChannel = None):
-        """Deshabilita un canal para ganar XP"""
-        if channel is None:
-            channel = ctx.channel
-        
-        guild_config = await database.get_guild_level_config(ctx.guild.id)
-        disabled_channels = guild_config['disabled_channels']
-        
-        if channel.id not in disabled_channels:
-            disabled_channels.append(channel.id)
-            await database.update_guild_config(ctx.guild.id, disabled_channels=disabled_channels)
-        
-        embed = discord.Embed(
-            title="✅ Canal Deshabilitado",
-            description=f"Los usuarios NO pueden ganar XP en {channel.mention}",
-            color=0xff0000
-        )
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="insignias", aliases=["badges"])
-    async def insignias(self, ctx, user: discord.Member = None):
-        """Muestra las insignias de un usuario"""
-        if user is None:
-            user = ctx.author
-        
-        user_data = await database.get_user_level_data(user.id, ctx.guild.id)
-        if not user_data:
+        if member.bot:
             embed = discord.Embed(
                 title="❌ Error",
-                description="Este usuario no tiene datos registrados.",
+                description="No puedes agregar XP a un bot.",
                 color=0xff0000
             )
             await ctx.send(embed=embed)
             return
         
-        badges = user_data['badges'] if user_data['badges'] else []
-        
-        embed = discord.Embed(
-            title=f"🏅 Insignias de {user.display_name}",
-            color=0xffd700
-        )
-        
-        if not badges:
-            embed.description = "Este usuario no tiene insignias aún."
-        else:
-            badge_text = ""
-            for badge_id in badges:
-                # Aquí podrías cargar las insignias desde la base de datos
-                badge_text += f"🏅 {badge_id}\n"
-            embed.description = badge_text
-        
-        embed.set_thumbnail(url=user.display_avatar.url)
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="reset_weekly")
-    @commands.has_permissions(administrator=True)
-    async def reset_weekly(self, ctx):
-        """Resetea manualmente las estadísticas semanales"""
-        await database.reset_weekly_xp(ctx.guild.id)
-        
-        embed = discord.Embed(
-            title="✅ Estadísticas Semanales Reseteadas",
-            description="Se han reseteado todas las estadísticas semanales del servidor.",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="reset_monthly")
-    @commands.has_permissions(administrator=True)
-    async def reset_monthly(self, ctx):
-        """Resetea manualmente las estadísticas mensuales"""
-        await database.reset_monthly_xp(ctx.guild.id)
-        
-        embed = discord.Embed(
-            title="✅ Estadísticas Mensuales Reseteadas",
-            description="Se han reseteado todas las estadísticas mensuales del servidor.",
-            color=0x00ff00
-        )
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="multiplier_event")
-    @commands.has_permissions(administrator=True)
-    async def multiplier_event(self, ctx, multiplier: float, duration_hours: int):
-        """Activa un evento de multiplicador de XP temporal"""
-        if multiplier <= 0 or duration_hours <= 0:
-            await ctx.send("❌ El multiplicador y la duración deben ser positivos.")
+        if amount <= 0:
+            embed = discord.Embed(
+                title="❌ Error",
+                description="La cantidad debe ser mayor a 0.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
             return
         
-        # Guardar multiplicador actual
-        guild_config = await database.get_guild_level_config(ctx.guild.id)
-        original_multiplier = guild_config['xp_multiplier']
-        
-        # Aplicar nuevo multiplicador
-        await database.update_guild_config(ctx.guild.id, xp_multiplier=multiplier)
-        
-        embed = discord.Embed(
-            title="🎉 ¡Evento de XP Activado!",
-            description=f"**{multiplier}x XP** activado por **{duration_hours} horas**",
-            color=0xff6600
-        )
-        await ctx.send(embed=embed)
-        
-        # Programar restauración del multiplicador
-        await asyncio.sleep(duration_hours * 3600)  # Convertir horas a segundos
-        
-        await database.update_guild_config(ctx.guild.id, xp_multiplier=original_multiplier)
-        
-        # Notificar fin del evento
-        embed = discord.Embed(
-            title="⏰ Evento de XP Finalizado",
-            description=f"El multiplicador de **{multiplier}x XP** ha expirado.",
-            color=0x666666
-        )
-        await ctx.send(embed=embed)
+        try:
+            await self.add_xp_and_check_levelup(member, amount)
+            
+            embed = discord.Embed(
+                title="✅ XP Agregada",
+                description=f"Se agregaron **{amount:,} XP** a {member.mention}",
+                color=0x00ff00
+            )
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            print(f"Error agregando XP: {e}")
+            embed = discord.Embed(
+                title="❌ Error",
+                description="Ocurrió un error al agregar XP.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
     
-    @commands.command(name="import_levels")
-    @commands.has_permissions(administrator=True)
-    async def import_levels(self, ctx):
-        """Comando para importar datos de otros bots de niveles (MEE6, etc.)"""
-        embed = discord.Embed(
-            title="📥 Importar Niveles",
-            description="Esta funcionalidad está en desarrollo.\n\nPronto podrás importar datos de:\n• MEE6\n• Carl-bot\n• Otros bots populares",
-            color=0xffaa00
-        )
-        await ctx.send(embed=embed)
-    
-    @commands.command(name="levels_stats")
-    @commands.has_permissions(administrator=True)
-    async def levels_stats(self, ctx):
-        """Muestra estadísticas generales del sistema de niveles"""
-        stats = await database.get_level_server_stats(ctx.guild.id)
+    @xp_commands.command(name="remove")
+    @commands.has_permissions(manage_guild=True)
+    async def remove_xp_command(self, ctx, member: discord.Member, amount: int):
+        """Quita XP a un usuario"""
+        if member.bot:
+            embed = discord.Embed(
+                title="❌ Error",
+                description="No puedes quitar XP a un bot.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
         
-        embed = discord.Embed(
-            title="📊 Estadísticas del Sistema de Niveles",
-            color=0x00ffff
-        )
-        embed.add_field(name="Usuarios Registrados", value=f"{stats['total_users']:,}", inline=True)
-        embed.add_field(name="Nivel Promedio", value=f"{stats['avg_level']:.1f}", inline=True)
-        embed.add_field(name="Mensajes Totales", value=f"{stats['total_messages']:,}", inline=True)
+        if amount <= 0:
+            embed = discord.Embed(
+                title="❌ Error",
+                description="La cantidad debe ser mayor a 0.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
         
-        if stats['top_user']:
-            top_member = ctx.guild.get_member(stats['top_user'][0])
-            if top_member:
-                embed.add_field(
-                    name="Usuario #1", 
-                    value=f"{top_member.display_name}\nNivel {stats['top_user'][2]} ({stats['top_user'][1]:,} XP)", 
-                    inline=False
+        try:
+            # Obtener XP actual
+            user_data = await get_user_level_data(member.id, ctx.guild.id)
+            if not user_data:
+                embed = discord.Embed(
+                    title="❌ Error",
+                    description="El usuario no tiene datos registrados.",
+                    color=0xff0000
                 )
-        
-        await ctx.send(embed=embed)
+                await ctx.send(embed=embed)
+                return
+            
+            current_xp = user_data['xp']
+            new_xp = max(0, current_xp - amount)
+            
+            await set_user_xp(member.id, ctx.guild.id, new_xp)
+            
+            embed = discord.Embed(
+                title="✅ XP Removida",
+                description=f"Se quitaron **{amount:,} XP** a {member.mention}",
+                color=0x00ff00
+            )
+            embed.add_field(name="XP Total", value=f"{new_xp:,}", inline=True)
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            print(f"Error quitando XP: {e}")
+            embed = discord.Embed(
+                title="❌ Error",
+                description="Ocurrió un error al quitar XP.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
     
-    @commands.command(name="show_config")
-    @commands.has_permissions(administrator=True)
-    async def show_config(self, ctx):
-        """Muestra la configuración actual del servidor"""
-        predefined_config = self.get_predefined_config(ctx.guild.id)
+    @xp_commands.command(name="set")
+    @commands.has_permissions(manage_guild=True)
+    async def set_xp_command(self, ctx, member: discord.Member, amount: int):
+        """Establece la XP de un usuario a un valor específico"""
+        if member.bot:
+            embed = discord.Embed(
+                title="❌ Error",
+                description="No puedes establecer XP a un bot.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
         
-        embed = discord.Embed(
-            title="⚙️ Configuración del Servidor",
-            color=0x00ffff
+        if amount < 0:
+            embed = discord.Embed(
+                title="❌ Error",
+                description="La cantidad no puede ser negativa.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        try:
+            await set_user_xp(member.id, ctx.guild.id, amount)
+            
+            level, current_xp, next_xp = self.get_level_from_total_xp(amount)
+            
+            embed = discord.Embed(
+                title="✅ XP Establecida",
+                description=f"La XP de {member.mention} se estableció a **{amount:,}**",
+                color=0x00ff00
+            )
+            embed.add_field(name="Nivel", value=str(level), inline=True)
+            embed.add_field(name="Progreso", value=f"{current_xp}/{next_xp}", inline=True)
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            print(f"Error estableciendo XP: {e}")
+            embed = discord.Embed(
+                title="❌ Error",
+                description="Ocurrió un error al establecer la XP.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+    
+    @xp_commands.command(name="setlevel")
+    @commands.has_permissions(manage_guild=True)
+    async def set_level_command(self, ctx, member: discord.Member, level: int):
+        """Establece el nivel de un usuario"""
+        if member.bot:
+            embed = discord.Embed(
+                title="❌ Error",
+                description="No puedes establecer nivel a un bot.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        if level < 1 or level > 200:
+            embed = discord.Embed(
+                title="❌ Error",
+                description="El nivel debe estar entre 1 y 200.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        try:
+            # Calcular XP total necesaria para el nivel
+            total_xp = self.get_total_xp_for_level(level)
+            
+            await set_user_xp(member.id, ctx.guild.id, total_xp)
+            
+            # Asignar rol si es múltiplo de 10
+            if level % 10 == 0:
+                await self.assign_level_role(member, level)
+            
+            embed = discord.Embed(
+                title="✅ Nivel Establecido",
+                description=f"El nivel de {member.mention} se estableció a **{level}**",
+                color=0x00ff00
+            )
+            embed.add_field(name="XP Total", value=f"{total_xp:,}", inline=True)
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            print(f"Error estableciendo nivel: {e}")
+            embed = discord.Embed(
+                title="❌ Error",
+                description="Ocurrió un error al establecer el nivel.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+    
+    @xp_commands.command(name="multiplier")
+    @commands.has_permissions(manage_guild=True)
+    async def set_multiplier_command(self, ctx, role: discord.Role, multiplier: float, hours: int):
+        """Aplica un multiplicador de XP a un rol por tiempo determinado"""
+        if multiplier <= 0:
+            embed = discord.Embed(
+                title="❌ Error",
+                description="El multiplicador debe ser mayor a 0.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        if hours <= 0:
+            embed = discord.Embed(
+                title="❌ Error",
+                description="Las horas deben ser mayores a 0.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        try:
+            expires_at = datetime.now() + timedelta(hours=hours)
+            
+            self.xp_multipliers[role.id] = {
+                'multiplier': multiplier,
+                'expires': expires_at
+            }
+            
+            embed = discord.Embed(
+                title="✅ Multiplicador Aplicado",
+                description=f"Multiplicador de **{multiplier}x** aplicado al rol {role.mention}",
+                color=0x00ff00
+            )
+            embed.add_field(name="Duración", value=f"{hours} horas", inline=True)
+            embed.add_field(name="Expira", value=expires_at.strftime("%d/%m/%Y %H:%M"), inline=True)
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            print(f"Error aplicando multiplicador: {e}")
+            embed = discord.Embed(
+                title="❌ Error",
+                description="Ocurrió un error al aplicar el multiplicador.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+    
+    # ================== FUNCIONES DEL PERFIL (MANTENIDAS EXACTAMENTE IGUAL) ==================
+    
+    def calculate_level_xp(self, level: int, formula: str = 'exponential') -> int:
+        """Calcula la XP necesaria para un nivel específico"""
+        if formula == 'linear':
+            return level * 100
+        elif formula == 'quadratic':
+            return level * level * 50
+        else:  # exponential (default)
+            return int(100 * (1.2 ** (level - 1)))
+    
+    def calculate_total_xp_for_level(self, level: int, formula: str = 'exponential') -> int:
+        """Calcula la XP total necesaria para alcanzar un nivel"""
+        total = 0
+        for i in range(1, level):
+            total += self.calculate_level_xp(i, formula)
+        return total
+    
+    def get_level_from_xp(self, xp: int, formula: str = 'exponential') -> tuple:
+        """Obtiene el nivel actual y XP necesaria para el siguiente nivel"""
+        level = 1
+        total_xp_used = 0
+        
+        while True:
+            xp_needed = self.calculate_level_xp(level, formula)
+            if total_xp_used + xp_needed > xp:
+                break
+            total_xp_used += xp_needed
+            level += 1
+        
+        current_level_xp = xp - total_xp_used
+        next_level_xp = self.calculate_level_xp(level, formula)
+        
+        return level, current_level_xp, next_level_xp
+    
+    def get_user_rank_role(self, member):
+        """Obtiene el rol de rango del usuario (que empiece con ◈ Rango)"""
+        for role in member.roles:
+            if role.name.startswith("◈ Rango"):
+                return role.name.replace("◈ ", "")
+        return "Sin Rango"
+    
+    async def get_user_avatar(self, user):
+        """Descarga el avatar del usuario"""
+        try:
+            async with aiohttp.ClientSession() as session:
+                avatar_url = user.display_avatar.url
+                async with session.get(avatar_url) as resp:
+                    avatar_data = await resp.read()
+                    return Image.open(io.BytesIO(avatar_data)).convert('RGBA')
+        except:
+            # Avatar por defecto si no se puede descargar
+            return Image.new('RGBA', (128, 128), (100, 100, 100, 255))
+    
+    def get_font(self, size: int, bold: bool = False):
+        """Obtiene una fuente con el tamaño especificado"""
+        try:
+            # Primero intentar cargar la fuente Orbitron específica
+            orbitron_path = "resources/fonts/Orbitron-Medium.ttf"
+            if os.path.exists(orbitron_path):
+                return ImageFont.truetype(orbitron_path, size)
+            
+            # Intentar otras variantes de Orbitron
+            orbitron_variants = [
+                "resources/fonts/Orbitron-Bold.ttf",
+                "resources/fonts/Orbitron-Regular.ttf",
+                "resources/fonts/Orbitron.ttf"
+            ]
+            
+            for variant in orbitron_variants:
+                if os.path.exists(variant):
+                    return ImageFont.truetype(variant, size)
+            
+            # Fallback a fuentes genéricas si Orbitron no está disponible
+            if bold:
+                font_files = ['bold.ttf', 'arial-bold.ttf', 'roboto-bold.ttf', 'font-bold.ttf']
+                for font_file in font_files:
+                    font_path = f"{self.font_path}/{font_file}"
+                    if os.path.exists(font_path):
+                        return ImageFont.truetype(font_path, size)
+            else:
+                font_files = ['regular.ttf', 'arial.ttf', 'roboto.ttf', 'font.ttf']
+                for font_file in font_files:
+                    font_path = f"{self.font_path}/{font_file}"
+                    if os.path.exists(font_path):
+                        return ImageFont.truetype(font_path, size)
+        except Exception as e:
+            print(f"Error cargando fuente: {e}")
+        
+        # Fuente por defecto si no encuentra ninguna personalizada
+        return ImageFont.load_default()
+    
+    def create_rounded_rectangle(self, width: int, height: int, radius: int, color: tuple):
+        """Crea un rectángulo con esquinas redondeadas"""
+        img = Image.new('RGBA', (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        draw.rounded_rectangle(
+            [(0, 0), (width, height)],
+            radius=radius,
+            fill=color
         )
         
-        # Canal de notificaciones
-        channel = ctx.guild.get_channel(predefined_config['level_up_channel'])
-        channel_name = channel.mention if channel else "❌ No configurado"
-        embed.add_field(name="Canal de Notificaciones", value=channel_name, inline=False)
-        
-        # Configuración de XP
-        embed.add_field(name="XP por Mensaje", value=predefined_config['xp_per_message'], inline=True)
-        embed.add_field(name="Cooldown", value=f"{predefined_config['xp_cooldown']}s", inline=True)
-        embed.add_field(name="Multiplicador", value=f"{predefined_config['xp_multiplier']}x", inline=True)
-        embed.add_field(name="Fórmula", value=predefined_config['level_formula'], inline=True)
-        
-        # Roles por nivel
-        level_roles = predefined_config.get('level_roles', {})
-        if level_roles:
-            roles_text = ""
-            for level in sorted(level_roles.keys()):
-                role = ctx.guild.get_role(level_roles[level])
-                role_name = role.mention if role else f"❌ ID: {level_roles[level]}"
-                roles_text += f"**Nivel {level}:** {role_name}\n"
-            
-            embed.add_field(name="Roles por Nivel", value=roles_text[:1024], inline=False)
-        
-        # Canales deshabilitados
-        if predefined_config['disabled_channels']:
-            disabled_text = ""
-            for channel_id in predefined_config['disabled_channels']:
-                channel = ctx.guild.get_channel(channel_id)
-                channel_name = channel.mention if channel else f"❌ ID: {channel_id}"
-                disabled_text += f"{channel_name}\n"
-            
-            embed.add_field(name="Canales Sin XP", value=disabled_text[:1024], inline=False)
-        
-        await ctx.send(embed=embed)
+        return img
     
-    @commands.command(name="reload_config")
-    @commands.has_permissions(administrator=True)
-    async def reload_config(self, ctx):
-        """Recarga la configuración predefinida del código"""
-        await self.initialize_guild_configs()
+    def create_circle_avatar(self, avatar_img: Image, size: int):
+        """Convierte el avatar en circular"""
+        avatar_img = avatar_img.resize((size, size), Image.Resampling.LANCZOS)
         
-        embed = discord.Embed(
-            title="✅ Configuración Recargada",
-            description="Se ha recargado la configuración predefinida desde el código.",
-            color=0x00ff00
+        # Crear máscara circular
+        mask = Image.new('L', (size, size), 0)
+        draw = ImageDraw.Draw(mask)
+        draw.ellipse((0, 0, size, size), fill=255)
+        
+        # Aplicar máscara
+        result = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        result.paste(avatar_img, (0, 0))
+        result.putalpha(mask)
+        
+        return result
+    
+    def draw_progress_bar(self, draw, x: int, y: int, width: int, height: int, 
+                         progress: float, bg_color: tuple, fill_color: tuple, radius: int = 15):
+        """Dibuja una barra de progreso con el estilo de la imagen"""
+        # Fondo de la barra (más oscuro)
+        draw.rounded_rectangle(
+            [(x, y), (x + width, y + height)],
+            radius=radius,
+            fill=bg_color
         )
-        await ctx.send(embed=embed)
+        
+        # Barra de progreso (cyan brillante)
+        if progress > 0:
+            progress_width = int(width * progress)
+            if progress_width > radius * 2:
+                draw.rounded_rectangle(
+                    [(x, y), (x + progress_width, y + height)],
+                    radius=radius,
+                    fill=fill_color
+                )
+    
+    def draw_trophy_box(self, draw, x: int, y: int, width: int, height: int, 
+                       bg_color: tuple, border_color: tuple, radius: int = 15):
+        """Esta función ya no se usa en el diseño simplificado"""
+        pass
+    
+    async def create_profile_image(self, user, user_data: dict, guild_config: dict, 
+                                 balance: float, rank: int):
+        """Crea la imagen del perfil con el diseño exacto de la imagen"""
+        # Dimensiones exactas especificadas
+        width, height = 820, 950
+        
+        # Crear imagen base con fondo azul oscuro como en la imagen
+        try:
+            # Intentar cargar fondo personalizado
+            background = Image.open(f"{self.bg_path}/perfil.png").resize((width, height))
+        except Exception as e:
+            print(f"No se pudo cargar la imagen de fondo: {e}")
+            # Fondo azul oscuro como en la imagen
+            background = Image.new('RGB', (width, height), (20, 35, 60))  # Color azul oscuro
+            
+        background = background.convert('RGBA')
+        draw = ImageDraw.Draw(background)
+        
+        # Colores exactos de la imagen
+        cyan_bright = (0, 255, 255)  # Cyan brillante
+        cyan_dark = (0, 180, 200)    # Cyan más oscuro
+        dark_blue = (15, 25, 45)     # Azul muy oscuro para fondos
+        darker_blue = (10, 20, 35)   # Azul aún más oscuro
+        white_text = (255, 255, 255) # Texto blanco
+        
+        # Obtener datos del usuario
+        level, current_xp, next_level_xp = self.get_level_from_xp(
+            user_data['xp'], guild_config['level_formula']
+        )
+        
+        # Obtener rol de rango del usuario
+        user_rank_role = self.get_user_rank_role(user)
+        
+        # Descargar y procesar avatar
+        avatar = await self.get_user_avatar(user)
+        
+        # Descargar y procesar avatar (más grande)
+        avatar = await self.get_user_avatar(user)
+        avatar_size = 140
+        avatar_circular = self.create_circle_avatar(avatar, avatar_size)
+        
+        # === LAYOUT ADAPTADO PARA 820x950 ===
+        
+        # Avatar en la parte superior centrado - más grande para la resolución
+        avatar_size = 220
+        avatar_circular = self.create_circle_avatar(avatar, avatar_size)
+        avatar_x = (width - avatar_size) - 542 
+        avatar_y = 49
+        
+        # Borde cyan alrededor del avatar
+        draw.ellipse(
+            [(avatar_x - 5, avatar_y - 5), (avatar_x + avatar_size + 5, avatar_y + avatar_size + 5)],
+            outline=cyan_bright,
+            width=0
+        )
+        
+        background.paste(avatar_circular, (avatar_x, avatar_y), avatar_circular)
+        
+        # Fuentes más grandes para la resolución 820x950
+        font_huge = self.get_font(54, bold=True)    # Para el nombre
+        font_large = self.get_font(40, bold=True)   # Para nivel
+        font_medium = self.get_font(60, bold=True)  # Para textos importantes
+        font_small = self.get_font(20)              # Para detalles
+        font_role = self.get_font(45, bold=True)    # Para el rol de rango
+        
+        # === INFORMACIÓN DEL USUARIO (DEBAJO DEL AVATAR) ===
+        
+        info_y = avatar_y + 40
+        
+        # Nombre del usuario centrado
+        username = user.name
+        if len(username) > 15:
+            username = username[:12] + "..."
+        
+        # Calcular posición centrada para el texto
+        bbox = draw.textbbox((0, 0), username, font=font_huge)
+        text_width = bbox[2] - bbox[0]
+        username_x = (width - text_width) + -190
+
+        draw.text((username_x, info_y + 10), username, font=font_huge, fill=cyan_bright)
+        
+        # Nivel centrado
+        level_text = f"{level}"
+        bbox = draw.textbbox((0, 0), level_text, font=font_role)
+        text_width = bbox[2] - bbox[0]
+        level_x = (width - text_width) -93
+        level_y = info_y + 112
+
+        draw.text((level_x, level_y), level_text, font=font_role, fill=cyan_bright)
+        
+        # Rol de rango a la misma altura del nivel pero 295px más a la izquierda
+        role_x = level_x - 295
+        role_y = level_y - 2
+        
+        # Acortar el texto del rol si es muy largo
+        role_text = user_rank_role
+        if len(role_text) > 12:
+            role_text = role_text[:9] + "..."
+        
+        draw.text((role_x, role_y), role_text, font=font_role, fill=cyan_bright)
+        
+        # === UNA SOLA BARRA DE PROGRESO ===
+        
+        progress_y = info_y + 240
+        
+        # Barra de progreso de XP
+        progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
+        
+        bar_width = width - 119
+        bar_height = 46
+        bar_x = 57
+        
+        self.draw_progress_bar(
+            draw, bar_x, progress_y, bar_width, bar_height, progress,
+            bg_color=darker_blue,
+            fill_color=cyan_bright,
+            radius=18
+        )
+        
+        # Texto "EXP" a la izquierda de la experiencia
+        exp_label_x = bar_x
+        exp_label_y = progress_y + bar_height + 15
+        draw.text((exp_label_x, exp_label_y), "EXP", font=font_small, fill=white_text)
+        
+        # Experiencia (750/1000) abajo izquierda de la barra
+        exp_text = f"{current_xp}/{next_level_xp}"
+        exp_text_x = exp_label_x + 60  # Después del texto "EXP"
+        draw.text((exp_text_x, exp_label_y), exp_text, font=font_small, fill=white_text)
+        
+        # === DINERO Y RANK ===
+        
+        money_y = progress_y + bar_height + 367
+        
+        # Dinero
+        money_text = f"{balance:.2f}"
+        bbox = draw.textbbox((0, 0), money_text, font=font_medium)
+        text_width = bbox[2] - bbox[0]
+        money_x = (width - text_width) - 428
+        draw.text((money_x, money_y), money_text, font=font_medium, fill=cyan_bright)
+        
+        # Rank en formato #2
+        rank_text = f"#{rank}"
+        bbox = draw.textbbox((0, 0), rank_text, font=font_medium)
+        text_width = bbox[2] - bbox[0]
+        rank_x = (width - text_width) -150
+        rank_y = money_y + 35
+        draw.text((rank_x, rank_y), rank_text, font=font_medium, fill=cyan_bright)
+        
+        return background
+    
+    @commands.command(name="perfil", aliases=["profile", "p"])
+    @commands.cooldown(1, 30, commands.BucketType.user)
+    async def perfil(self, ctx, member: discord.Member = None):
+        """Muestra el perfil de un usuario con imagen personalizada"""
+        
+        if member is None:
+            member = ctx.author
+        
+        if member.bot:
+            embed = discord.Embed(
+                title="⚠ Error",
+                description="No puedo mostrar el perfil de un bot.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        try:
+            # Obtener datos del usuario
+            user_data = await get_user_level_data(member.id, ctx.guild.id)
+            if not user_data:
+                embed = discord.Embed(
+                    title="⚠ Usuario no encontrado",
+                    description=f"{member.mention} no tiene datos registrados en el sistema de niveles.",
+                    color=0xff0000
+                )
+                await ctx.send(embed=embed)
+                return
+            
+            # Obtener configuración del servidor
+            guild_config = await get_guild_level_config(ctx.guild.id)
+            
+            # Obtener balance del usuario
+            balance = await get_user_balance(member.id)
+            
+            # Obtener ranking del usuario
+            rank = await get_user_rank(member.id, ctx.guild.id)
+            
+            # Crear imagen del perfil
+            profile_img = await self.create_profile_image(
+                member, user_data, guild_config, float(balance), rank
+            )
+            
+            # Convertir imagen a bytes
+            img_buffer = io.BytesIO()
+            profile_img.save(img_buffer, format='PNG', quality=95)
+            img_buffer.seek(0)
+            
+            # Crear archivo de Discord
+            file = discord.File(img_buffer, filename=f"perfil_{member.id}.png")
+            
+            # Enviar solo la imagen, sin embed
+            await ctx.send(file=file)
+            
+        except Exception as e:
+            print(f"Error en comando perfil: {e}")
+            
+            embed = discord.Embed(
+                title="⚠ Error",
+                description="Ocurrió un error al generar el perfil. Inténtalo de nuevo más tarde.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+    
+    @perfil.error
+    async def perfil_error(self, ctx, error):
+        """Maneja errores del comando perfil"""
+        if isinstance(error, commands.CommandOnCooldown):
+            embed = discord.Embed(
+                title="⏰ Cooldown",
+                description=f"Debes esperar {error.retry_after:.0f} segundos antes de usar este comando de nuevo.",
+                color=0xffaa00
+            )
+            await ctx.send(embed=embed)
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(Levels(bot))
+    # Crear directorios necesarios
+    os.makedirs("resources/fonts", exist_ok=True)
+    os.makedirs("resources/images/perfil", exist_ok=True)
+    
+    await bot.add_cog(LevelsSystem(bot))
