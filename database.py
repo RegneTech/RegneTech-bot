@@ -927,6 +927,33 @@ async def reset_monthly_xp(guild_id: int = None):
             await conn.execute('UPDATE levels_users SET monthly_xp = 0')
 
 # ==========================================
+# FUNCIONES ADICIONALES PARA EL SISTEMA DE NIVELES
+# ==========================================
+
+async def add_user_xp(user_id: int, guild_id: int, xp_amount: int):
+    """Agrega XP a un usuario específico"""
+    import time
+    current_time = int(time.time())
+    
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO levels_users (
+                user_id, guild_id, xp, level, last_xp_time, total_messages, 
+                weekly_xp, monthly_xp, badges, join_date, voice_time
+            ) VALUES ($1, $2, $3, 1, $4, 0, $3, $3, '[]'::jsonb, $4, 0)
+            ON CONFLICT (user_id, guild_id) 
+            DO UPDATE SET 
+                xp = levels_users.xp + $3,
+                last_xp_time = $4,
+                weekly_xp = levels_users.weekly_xp + $3,
+                monthly_xp = levels_users.monthly_xp + $3
+        """, user_id, guild_id, xp_amount, current_time)
+
+async def set_user_level(user_id: int, guild_id: int, level: int):
+    """Establece el nivel de un usuario (wrapper para compatibilidad)"""
+    await update_user_level(user_id, guild_id, level)
+
+# ==========================================
 # FUNCIONES PARA EL SISTEMA DE PARTNERS
 # ==========================================
 
