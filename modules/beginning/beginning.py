@@ -11,9 +11,11 @@ class Verify(commands.Cog):
         self.AUTOROLES_CHANNEL_ID = 1403015632844488839
         self.REWARDS_CHANNEL_ID = 1406413774147158086  # Canal de recompensas
         self.VERIFIED_ROLE_ID = 1400106792196898888
+        self.AUTO_ROLE_ID = 1406360634643316746  # Rol automático que se asigna junto con verificado
         self.RESENADOR_ROLE_ID = 1400106792196898891
         self.BUMPEADOR_ROLE_ID = 1400106792196898892
         self.NUEVO_ROLE_ID = 1406641834553380884  # Nuevo rol agregado
+        self.RANGO_PREFIX = "◈ Rango"  # Prefijo de roles de rango
         
         # Diccionario de roles por nivel (ordenado de mayor a menor para mostrar correctamente)
         self.LEVEL_ROLES = {
@@ -103,6 +105,71 @@ class Verify(commands.Cog):
             ]
         }
 
+    # ═══ FUNCIONES DE GESTIÓN DE ROLES ═══
+    
+    async def check_and_remove_auto_role(self, member, after_roles):
+        """Verifica si se añadió un rol de rango y remueve el rol automático"""
+        try:
+            verified_role = member.guild.get_role(self.VERIFIED_ROLE_ID)
+            auto_role = member.guild.get_role(self.AUTO_ROLE_ID)
+            
+            if not verified_role or not auto_role:
+                return
+            
+            # Verificar si tiene el rol verificado
+            if verified_role in member.roles:
+                # Verificar si tiene rol de rango en los roles actuales
+                has_rango_role = any(role.name.startswith(self.RANGO_PREFIX) for role in after_roles)
+                
+                if has_rango_role and auto_role in member.roles:
+                    await member.remove_roles(auto_role, reason="Removido automáticamente - usuario tiene rol de rango")
+                    print(f"✅ Rol automático removido de {member.display_name} (tiene rol de rango)")
+                    
+        except Exception as e:
+            print(f"❌ Error removiendo rol automático de {member.display_name}: {e}")
+
+    async def check_and_assign_auto_role(self, member):
+        """Verifica si el usuario necesita el rol automático"""
+        try:
+            verified_role = member.guild.get_role(self.VERIFIED_ROLE_ID)
+            auto_role = member.guild.get_role(self.AUTO_ROLE_ID)
+            
+            if not verified_role or not auto_role:
+                return
+            
+            # Verificar si tiene el rol verificado
+            if verified_role in member.roles:
+                # Verificar si NO tiene rol de rango
+                has_rango_role = any(role.name.startswith(self.RANGO_PREFIX) for role in member.roles)
+                
+                if not has_rango_role and auto_role not in member.roles:
+                    await member.add_roles(auto_role, reason="Asignación automática - sin rol de rango")
+                    print(f"✅ Rol automático asignado a {member.display_name}")
+                    
+        except Exception as e:
+            print(f"❌ Error asignando rol automático a {member.display_name}: {e}")
+
+    # ═══ EVENTOS DE DISCORD ═══
+    
+    @commands.Cog.listener()
+    async def on_member_update(self, before, after):
+        """Evento que se ejecuta cuando se actualizan los roles de un miembro"""
+        # Verificar si se añadieron roles
+        if before.roles != after.roles:
+            # Verificar si se añadió un rol de rango
+            new_roles = set(after.roles) - set(before.roles)
+            rango_role_added = any(role.name.startswith(self.RANGO_PREFIX) for role in new_roles)
+            
+            if rango_role_added:
+                await self.check_and_remove_auto_role(after, after.roles)
+            else:
+                # Si se removieron roles, verificar si necesita el rol automático
+                removed_roles = set(before.roles) - set(after.roles)
+                rango_role_removed = any(role.name.startswith(self.RANGO_PREFIX) for role in removed_roles)
+                
+                if rango_role_removed:
+                    await self.check_and_assign_auto_role(after)
+
     async def cog_load(self):
         """Se ejecuta cuando el cog es cargado"""
         print("🔧 Configurando sistemas automáticamente al cargar el cog...")
@@ -159,6 +226,52 @@ class Verify(commands.Cog):
             return 0
         except Exception:
             return 0
+
+    @commands.command(name="roles_status")
+    @commands.has_permissions(administrator=True)
+    async def roles_status(self, ctx):
+        """Muestra el estado de los roles del sistema de verificación"""
+        verified_role = ctx.guild.get_role(self.VERIFIED_ROLE_ID)
+        auto_role = ctx.guild.get_role(self.AUTO_ROLE_ID)
+        
+        embed = discord.Embed(
+            title="🎭 Estado de Roles de Verificación",
+            color=0x00ffff
+        )
+        
+        embed.add_field(
+            name="✅ Rol Verificado",
+            value=f"{verified_role.mention if verified_role else '❌ No encontrado'}\nID: `{self.VERIFIED_ROLE_ID}`",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="⚙️ Rol Automático",
+            value=f"{auto_role.mention if auto_role else '❌ No encontrado'}\nID: `{self.AUTO_ROLE_ID}`",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="👑 Prefijo de Rango",
+            value=f"`{self.RANGO_PREFIX}`",
+            inline=True
+        )
+        
+        if verified_role:
+            members_verified = len([m for m in ctx.guild.members if verified_role in m.roles])
+            embed.add_field(
+                name="📊 Estadísticas",
+                value=f"Miembros verificados: **{members_verified}**",
+                inline=False
+            )
+        
+        embed.add_field(
+            name="📋 Funcionamiento",
+            value="• Al verificarse: Se asignan AMBOS roles (verificado + automático)\n• Al obtener rol de rango: Se remueve automáticamente el rol automático\n• Al perder rol de rango: Se reasigna el rol automático",
+            inline=False
+        )
+        
+        await ctx.send(embed=embed)
 
     @commands.command(name="rewards_setup")
     @commands.has_permissions(administrator=True)
@@ -286,6 +399,12 @@ class Verify(commands.Cog):
         )
         
         embed.add_field(
+            name="Comandos de Roles",
+            value="• `!roles_status` - Ver estado de roles de verificación\n",
+            inline=False
+        )
+        
+        embed.add_field(
             name="Información",
             value="• `!help_embeds` - Muestra esta ayuda\n\n"
                   "**Nota:** Todos los comandos requieren permisos de administrador.\n"
@@ -406,7 +525,7 @@ class Verify(commands.Cog):
             icon_url=channel.guild.icon.url if channel.guild.icon else None
         )
         
-        view = VerificationView(self.VERIFIED_ROLE_ID, self.RULES_CHANNEL_ID)
+        view = VerificationView(self.VERIFIED_ROLE_ID, self.AUTO_ROLE_ID, self.RULES_CHANNEL_ID, self.RANGO_PREFIX)
         await channel.send(embed=embed, view=view)
 
     async def setup_rules(self, guild):
@@ -544,19 +663,19 @@ class Verify(commands.Cog):
         )
         
         embed.add_field(
-            name="【📚 RESEÑADOR】",
+            name="〖📚 RESEÑADOR〗",
             value="Recibe notificaciones cada vez que haya nuevas reseñas disponibles para completar y ganar dinero real.",
             inline=False
         )
         
         embed.add_field(
-            name="【🚀 BUMPEADOR】", 
+            name="〖🚀 BUMPEADOR〗", 
             value="Ayuda a hacer crecer el servidor y recibe notificaciones cuando sea momento de hacer bump en el servidor.",
             inline=False
         )
         
         embed.add_field(
-            name="【✨ PARTNER PING】", 
+            name="〖✨ PARTNER PING〗", 
             value="Recibe notificaciones cada vez que haya un nuevo partner para poder ver lo que ofrecen en otros servidores.",
             inline=False
         )
@@ -656,7 +775,7 @@ class AutoRolesView(discord.ui.View):
         self.bumpeador_role_id = bumpeador_role_id
         self.nuevo_role_id = nuevo_role_id
 
-    @discord.ui.button(label="【📚】", style=discord.ButtonStyle.gray, custom_id="resenador_role")
+    @discord.ui.button(label="〖📚〗", style=discord.ButtonStyle.gray, custom_id="resenador_role")
     async def resenador_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         role = interaction.guild.get_role(self.resenador_role_id)
         
@@ -691,7 +810,7 @@ class AutoRolesView(discord.ui.View):
                 ephemeral=True
             )
 
-    @discord.ui.button(label="【🚀】", style=discord.ButtonStyle.gray, custom_id="bumpeador_role")
+    @discord.ui.button(label="〖🚀〗", style=discord.ButtonStyle.gray, custom_id="bumpeador_role")
     async def bumpeador_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         role = interaction.guild.get_role(self.bumpeador_role_id)
         
@@ -726,7 +845,7 @@ class AutoRolesView(discord.ui.View):
                 ephemeral=True
             )
 
-    @discord.ui.button(label="【✨】", style=discord.ButtonStyle.gray, custom_id="nuevo_role")
+    @discord.ui.button(label="〖✨〗", style=discord.ButtonStyle.gray, custom_id="nuevo_role")
     async def nuevo_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         role = interaction.guild.get_role(self.nuevo_role_id)
         
@@ -762,18 +881,28 @@ class AutoRolesView(discord.ui.View):
             )
 
 class VerificationView(discord.ui.View):
-    def __init__(self, verified_role_id, rules_channel_id):
+    def __init__(self, verified_role_id, auto_role_id, rules_channel_id, rango_prefix):
         super().__init__(timeout=None)
         self.verified_role_id = verified_role_id
+        self.auto_role_id = auto_role_id
         self.rules_channel_id = rules_channel_id
+        self.rango_prefix = rango_prefix
 
-    @discord.ui.button(label="🔓 Verificarme", style=discord.ButtonStyle.green, emoji="✅")
+    @discord.ui.button(label="🔐 Verificarme", style=discord.ButtonStyle.green, emoji="✅")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         verified_role = interaction.guild.get_role(self.verified_role_id)
+        auto_role = interaction.guild.get_role(self.auto_role_id)
         
         if not verified_role:
             await interaction.response.send_message(
                 "❌ Error: No se pudo encontrar el rol de verificado.", 
+                ephemeral=True
+            )
+            return
+        
+        if not auto_role:
+            await interaction.response.send_message(
+                "❌ Error: No se pudo encontrar el rol automático.", 
                 ephemeral=True
             )
             return
@@ -786,7 +915,16 @@ class VerificationView(discord.ui.View):
             return
         
         try:
-            await interaction.user.add_roles(verified_role)
+            # Asignar ambos roles
+            roles_to_add = [verified_role]
+            
+            # Verificar si el usuario NO tiene rol de rango antes de asignar el rol automático
+            has_rango_role = any(role.name.startswith(self.rango_prefix) for role in interaction.user.roles)
+            
+            if not has_rango_role:
+                roles_to_add.append(auto_role)
+            
+            await interaction.user.add_roles(*roles_to_add)
             
             rules_channel = interaction.guild.get_channel(self.rules_channel_id)
             
@@ -795,6 +933,20 @@ class VerificationView(discord.ui.View):
                 description=f"¡Bienvenido oficial a **{interaction.guild.name}**!\n\n"
                            f"✅ Has sido verificado correctamente y ahora tienes acceso completo al servidor.",
                 color=0x00ff00
+            )
+            
+            # Informar sobre los roles asignados
+            roles_assigned = f"**Roles asignados:**\n• {verified_role.name}"
+            if auto_role in roles_to_add:
+                roles_assigned += f"\n• {auto_role.name}"
+                roles_assigned += f"\n\n*Nota: El rol {auto_role.name} se removerá automáticamente si obtienes un rol que empiece con '{self.rango_prefix}'*"
+            else:
+                roles_assigned += f"\n\n*Nota: No se asignó el rol automático porque ya tienes un rol de rango*"
+            
+            welcome_embed.add_field(
+                name="🎭 Información de Roles",
+                value=roles_assigned,
+                inline=False
             )
             
             if rules_channel:
@@ -819,6 +971,13 @@ class VerificationView(discord.ui.View):
                 ephemeral=True
             )
             
+            # Log de verificación
+            print(f"✅ Usuario {interaction.user.display_name} verificado exitosamente")
+            if auto_role in roles_to_add:
+                print(f"   • Roles asignados: {verified_role.name}, {auto_role.name}")
+            else:
+                print(f"   • Solo rol verificado asignado (usuario tiene rol de rango)")
+            
         except discord.Forbidden:
             await interaction.response.send_message(
                 "❌ Error: No tengo permisos para asignar roles.", 
@@ -829,6 +988,7 @@ class VerificationView(discord.ui.View):
                 f"❌ Error inesperado: {str(e)}", 
                 ephemeral=True
             )
+            print(f"❌ Error en verificación de {interaction.user.display_name}: {e}")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(Verify(bot))
