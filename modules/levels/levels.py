@@ -60,7 +60,7 @@ class LevelsSystem(commands.Cog):
         # Iniciar tarea de XP automático
         self.auto_xp_task.start()
         
-        # Tabla de XP por niveles (de tu documento)
+        # Tabla de XP por niveles (ÚNICA FUENTE DE VERDAD)
         self.xp_table = {
             1: 1000, 2: 1050, 3: 1100, 4: 1150, 5: 1200, 6: 1250, 7: 1300, 8: 1355,
             9: 1405, 10: 1455, 11: 1505, 12: 1555, 13: 1605, 14: 1660, 15: 1710,
@@ -181,13 +181,13 @@ class LevelsSystem(commands.Cog):
         """Espera a que el bot esté listo"""
         await self.bot.wait_until_ready()
     
-    # ================== FUNCIONES AUXILIARES ==================
+    # ================== FUNCIONES AUXILIARES (CORREGIDAS) ==================
     
     def get_level_from_total_xp(self, total_xp: int) -> tuple:
-        """Obtiene el nivel actual y XP necesaria para el siguiente nivel"""
+        """ÚNICA función para calcular nivel desde XP total - USA LA TABLA FIJA"""
         current_level = 1
         
-        # Encontrar el nivel actual
+        # Encontrar el nivel actual basado en XP acumulada
         for level in range(1, 201):
             if total_xp < self.cumulative_xp.get(level + 1, float('inf')):
                 current_level = level
@@ -578,40 +578,7 @@ class LevelsSystem(commands.Cog):
             )
             await ctx.send(embed=embed)
     
-    # ================== FUNCIONES DEL PERFIL (MANTENIDAS EXACTAMENTE IGUAL) ==================
-    
-    def calculate_level_xp(self, level: int, formula: str = 'exponential') -> int:
-        """Calcula la XP necesaria para un nivel específico"""
-        if formula == 'linear':
-            return level * 100
-        elif formula == 'quadratic':
-            return level * level * 50
-        else:  # exponential (default)
-            return int(100 * (1.2 ** (level - 1)))
-    
-    def calculate_total_xp_for_level(self, level: int, formula: str = 'exponential') -> int:
-        """Calcula la XP total necesaria para alcanzar un nivel"""
-        total = 0
-        for i in range(1, level):
-            total += self.calculate_level_xp(i, formula)
-        return total
-    
-    def get_level_from_xp(self, xp: int, formula: str = 'exponential') -> tuple:
-        """Obtiene el nivel actual y XP necesaria para el siguiente nivel"""
-        level = 1
-        total_xp_used = 0
-        
-        while True:
-            xp_needed = self.calculate_level_xp(level, formula)
-            if total_xp_used + xp_needed > xp:
-                break
-            total_xp_used += xp_needed
-            level += 1
-        
-        current_level_xp = xp - total_xp_used
-        next_level_xp = self.calculate_level_xp(level, formula)
-        
-        return level, current_level_xp, next_level_xp
+    # ================== FUNCIONES DEL PERFIL ==================
     
     def get_user_rank_role(self, member):
         """Obtiene el rol de rango del usuario (que empiece con ◈ Rango)"""
@@ -719,14 +686,8 @@ class LevelsSystem(commands.Cog):
                     fill=fill_color
                 )
     
-    def draw_trophy_box(self, draw, x: int, y: int, width: int, height: int, 
-                       bg_color: tuple, border_color: tuple, radius: int = 15):
-        """Esta función ya no se usa en el diseño simplificado"""
-        pass
-    
-    async def create_profile_image(self, user, user_data: dict, guild_config: dict, 
-                                 balance: float, rank: int):
-        """Crea la imagen del perfil con el diseño exacto de la imagen"""
+    async def create_profile_image(self, user, user_data: dict, balance: float, rank: int):
+        """Crea la imagen del perfil con el diseño exacto y DATOS CORRECTOS"""
         # Dimensiones exactas especificadas
         width, height = 820, 950
         
@@ -749,21 +710,17 @@ class LevelsSystem(commands.Cog):
         darker_blue = (10, 20, 35)   # Azul aún más oscuro
         white_text = (255, 255, 255) # Texto blanco
         
-        # Obtener datos del usuario
-        level, current_xp, next_level_xp = self.get_level_from_xp(
-            user_data['xp'], guild_config['level_formula']
-        )
+        # ===== USAR ÚNICA FUNCIÓN PARA CALCULAR NIVEL =====
+        total_xp = user_data['xp']
+        level, current_xp, next_level_xp = self.get_level_from_total_xp(total_xp)
+        
+        print(f"DEBUG: Usuario {user.name} - XP Total: {total_xp}, Nivel: {level}, XP en nivel: {current_xp}/{next_level_xp}")
         
         # Obtener rol de rango del usuario
         user_rank_role = self.get_user_rank_role(user)
         
         # Descargar y procesar avatar
         avatar = await self.get_user_avatar(user)
-        
-        # Descargar y procesar avatar (más grande)
-        avatar = await self.get_user_avatar(user)
-        avatar_size = 140
-        avatar_circular = self.create_circle_avatar(avatar, avatar_size)
         
         # === LAYOUT ADAPTADO PARA 820x950 ===
         
@@ -829,7 +786,7 @@ class LevelsSystem(commands.Cog):
         
         progress_y = info_y + 240
         
-        # Barra de progreso de XP
+        # Barra de progreso de XP - USANDO DATOS CORRECTOS
         progress = current_xp / next_level_xp if next_level_xp > 0 else 1.0
         
         bar_width = width - 119
@@ -848,7 +805,7 @@ class LevelsSystem(commands.Cog):
         exp_label_y = progress_y + bar_height + 15
         draw.text((exp_label_x, exp_label_y), "EXP", font=font_small, fill=white_text)
         
-        # Experiencia (750/1000) abajo izquierda de la barra
+        # Experiencia (750/1000) abajo izquierda de la barra - DATOS CORRECTOS
         exp_text = f"{current_xp}/{next_level_xp}"
         exp_text_x = exp_label_x + 60  # Después del texto "EXP"
         draw.text((exp_text_x, exp_label_y), exp_text, font=font_small, fill=white_text)
@@ -903,18 +860,20 @@ class LevelsSystem(commands.Cog):
                 await ctx.send(embed=embed)
                 return
             
-            # Obtener configuración del servidor
-            guild_config = await get_guild_level_config(ctx.guild.id)
-            
             # Obtener balance del usuario
             balance = await get_user_balance(member.id)
             
             # Obtener ranking del usuario
             rank = await get_user_rank(member.id, ctx.guild.id)
             
-            # Crear imagen del perfil
+            # DEBUG: Mostrar datos obtenidos
+            total_xp = user_data['xp']
+            level, current_xp, next_level_xp = self.get_level_from_total_xp(total_xp)
+            print(f"PERFIL DEBUG: {member.name} - XP: {total_xp}, Nivel calculado: {level}")
+            
+            # Crear imagen del perfil - SIN guild_config
             profile_img = await self.create_profile_image(
-                member, user_data, guild_config, float(balance), rank
+                member, user_data, float(balance), rank
             )
             
             # Convertir imagen a bytes
@@ -948,6 +907,40 @@ class LevelsSystem(commands.Cog):
                 color=0xffaa00
             )
             await ctx.send(embed=embed)
+    
+    # ================== COMANDO DE DEBUG ==================
+    
+    @commands.command(name="xpinfo")
+    @commands.has_permissions(manage_guild=True)
+    async def xp_info(self, ctx, member: discord.Member = None):
+        """Comando de debug para verificar XP y nivel de un usuario"""
+        if member is None:
+            member = ctx.author
+        
+        try:
+            user_data = await get_user_level_data(member.id, ctx.guild.id)
+            if not user_data:
+                await ctx.send("❌ Usuario no encontrado en la base de datos")
+                return
+            
+            total_xp = user_data['xp']
+            level, current_xp, next_level_xp = self.get_level_from_total_xp(total_xp)
+            
+            embed = discord.Embed(
+                title=f"🔍 Información XP de {member.display_name}",
+                color=0x00ffff
+            )
+            embed.add_field(name="XP Total", value=f"{total_xp:,}", inline=True)
+            embed.add_field(name="Nivel Calculado", value=str(level), inline=True)
+            embed.add_field(name="XP en Nivel Actual", value=f"{current_xp:,}", inline=True)
+            embed.add_field(name="XP para Siguiente Nivel", value=f"{next_level_xp:,}", inline=True)
+            embed.add_field(name="Progreso", value=f"{current_xp}/{next_level_xp}", inline=True)
+            embed.add_field(name="XP Acumulada hasta Nivel", value=f"{self.cumulative_xp.get(level, 0):,}", inline=True)
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            await ctx.send(f"❌ Error: {e}")
 
 async def setup(bot: commands.Bot):
     # Crear directorios necesarios
