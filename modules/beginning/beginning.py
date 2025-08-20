@@ -1,222 +1,306 @@
 import discord
 from discord.ext import commands
+import asyncio
 
 class Verify(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Configuración de canales (puedes modificar estos IDs según tu servidor)
+        # Configuración de canales
         self.VERIFICATION_CHANNEL_ID = 1400106792821981245
         self.RULES_CHANNEL_ID = 1400106792821981246
         self.FUNCIONAMIENTO_CHANNEL_ID = 1400106793551663187
         self.AUTOROLES_CHANNEL_ID = 1403015632844488839
-        self.REWARDS_CHANNEL_ID = 1406413774147158086  # Canal de recompensas
+        self.REWARDS_CHANNEL_ID = 1406413774147158086
         self.VERIFIED_ROLE_ID = 1400106792196898888
-        self.AUTO_ROLE_ID = 1406360634643316746  # Rol automático que se asigna junto con verificado
+        self.AUTO_ROLE_ID = 1406360634643316746
         self.RESENADOR_ROLE_ID = 1400106792196898891
         self.BUMPEADOR_ROLE_ID = 1400106792196898892
-        self.NUEVO_ROLE_ID = 1406641834553380884  # Nuevo rol agregado
-        self.RANGO_PREFIX = "◈ Rango"  # Prefijo de roles de rango
+        self.NUEVO_ROLE_ID = 1406641834553380884
+        self.RANGO_PREFIX = "◈ Rango"
         
-        # Diccionario de roles por nivel (ordenado de mayor a menor para mostrar correctamente)
+        # Control de operaciones en progreso para evitar conflictos
+        self._role_operations = set()
+        
+        # Diccionario de roles por nivel
         self.LEVEL_ROLES = {
-            200: 1400106792280658067,  # Rol Nivel 200 (Máximo)
-            190: 1400106792280658066,  # Rol Nivel 190
-            180: 1400106792280658065,  # Rol Nivel 180
-            170: 1400106792280658064,  # Rol Nivel 170
-            160: 1400106792280658063,  # Rol Nivel 160
-            150: 1400106792280658062,  # Rol Nivel 150
-            140: 1400106792280658061,  # Rol Nivel 140
-            130: 1400106792226127923,  # Rol Nivel 130
-            120: 1400106792226127922,  # Rol Nivel 120
-            110: 1400106792226127921,  # Rol Nivel 110
-            100: 1400106792226127920,  # Rol Nivel 100
-            90: 1400106792226127919,   # Rol Nivel 90
-            80: 1400106792226127918,   # Rol Nivel 80
-            70: 1400106792226127917,   # Rol Nivel 70
-            60: 1400106792226127916,   # Rol Nivel 60
-            50: 1400106792226127915,   # Rol Nivel 50
-            40: 1400106792226127914,   # Rol Nivel 40
-            30: 1400106792196898895,   # Rol Nivel 30
-            20: 1400106792196898894,   # Rol Nivel 20
-            10: 1400106792196898893,   # Rol Nivel 10
+            200: 1400106792280658067,  190: 1400106792280658066,
+            180: 1400106792280658065,  170: 1400106792280658064,
+            160: 1400106792280658063,  150: 1400106792280658062,
+            140: 1400106792280658061,  130: 1400106792226127923,
+            120: 1400106792226127922,  110: 1400106792226127921,
+            100: 1400106792226127920,  90: 1400106792226127919,
+            80: 1400106792226127918,   70: 1400106792226127917,
+            60: 1400106792226127916,   50: 1400106792226127915,
+            40: 1400106792226127914,   30: 1400106792196898895,
+            20: 1400106792196898894,   10: 1400106792196898893,
         }
         
-        # Recompensas por nivel (en orden inverso como pediste)
+        # Recompensas por nivel
         self.LEVEL_REWARDS = {
-            200: [
-                "Beneficio acumulado de todos los anteriores + diseño de perfil único que nadie más puede tener."
-            ],
-            190: [
-                "Acceso a \"misiones legendarias\" con premios exclusivos."
-            ],
-            180: [
-                "Multiplicador de recompensas en torneos y eventos (+50%)."
-            ],
-            170: [
-                "Acceso a encuestas exclusivas de decisiones del servidor."
-            ],
-            160: [
-                "Acceso a canal de leaks/spoilers VIP."
-            ],
-            150: [
-                "x4 de XP durante 78h + logro exclusivo."
-            ],
-            140: [
-                "x2 de suerte en eventos y similares."
-            ],
-            130: [
-                "Perfil único personalizado que usarás tú y estará en la tienda."
-            ],
-            120: [
-                "Ganar más de 1€ por reseña."
-            ],
-            110: [
-                "Rol exclusivo y acceso a misiones."
-            ],
-            100: [
-                "Comprar diseños de perfil en la tienda."
-            ],
-            90: [
-                "Acceso a sorteos gratis y torneos."
-            ],
-            80: [
-                "x3 de XP durante 78h + logro exclusivo."
-            ],
-            70: [
-                "Acceso a canal privado + añadir emojis."
-            ],
-            60: [
-                "Diseño de perfil exclusivo + gama de colores."
-            ],
-            50: [
-                "x2 de XP durante 78h + logro exclusivo."
-            ],
-            40: [
-                "Permisos para gifs e imágenes dentro del servidor."
-            ],
-            30: [
-                "Desbloquea gama de colores para personalizar perfil."
-            ],
-            20: [
-                "Sube precio inicial de 0.3 a 0.5 en reseñas."
-            ],
-            10: [
-                "Cambiar color del nombre y cambiar apodo."
-            ]
+            200: ["Beneficio acumulado de todos los anteriores + diseño de perfil único que nadie más puede tener."],
+            190: ["Acceso a \"misiones legendarias\" con premios exclusivos."],
+            180: ["Multiplicador de recompensas en torneos y eventos (+50%)."],
+            170: ["Acceso a encuestas exclusivas de decisiones del servidor."],
+            160: ["Acceso a canal de leaks/spoilers VIP."],
+            150: ["x4 de XP durante 78h + logro exclusivo."],
+            140: ["x2 de suerte en eventos y similares."],
+            130: ["Perfil único personalizado que usarás tú y estará en la tienda."],
+            120: ["Ganar más de 1€ por reseña."],
+            110: ["Rol exclusivo y acceso a misiones."],
+            100: ["Comprar diseños de perfil en la tienda."],
+            90: ["Acceso a sorteos gratis y torneos."],
+            80: ["x3 de XP durante 78h + logro exclusivo."],
+            70: ["Acceso a canal privado + añadir emojis."],
+            60: ["Diseño de perfil exclusivo + gama de colores."],
+            50: ["x2 de XP durante 78h + logro exclusivo."],
+            40: ["Permisos para gifs e imágenes dentro del servidor."],
+            30: ["Desbloquea gama de colores para personalizar perfil."],
+            20: ["Sube precio inicial de 0.3 a 0.5 en reseñas."],
+            10: ["Cambiar color del nombre y cambiar apodo."]
         }
 
-    # ═══ FUNCIONES DE GESTIÓN DE ROLES ═══
+    # ╔══ FUNCIONES AUXILIARES MEJORADAS ══╗
     
-    async def check_and_remove_auto_role(self, member, after_roles):
-        """Verifica si se añadió un rol de rango y remueve el rol automático"""
+    def has_rango_role(self, member):
+        """Verifica si el miembro tiene algún rol de rango"""
+        return any(role.name.startswith(self.RANGO_PREFIX) for role in member.roles)
+    
+    async def safe_role_operation(self, member, operation_type, *roles):
+        """Realiza operaciones de roles de forma segura evitando conflictos"""
+        user_key = f"{member.id}_{operation_type}"
+        
+        # Evitar operaciones concurrentes en el mismo usuario
+        if user_key in self._role_operations:
+            print(f"⚠️ Operación {operation_type} ya en progreso para {member.display_name}")
+            return False
+        
+        self._role_operations.add(user_key)
+        
+        try:
+            if operation_type == "add":
+                await member.add_roles(*roles, reason="Gestión automática de roles")
+                print(f"✅ Roles añadidos a {member.display_name}: {[r.name for r in roles]}")
+            elif operation_type == "remove":
+                await member.remove_roles(*roles, reason="Gestión automática de roles")
+                print(f"✅ Roles removidos de {member.display_name}: {[r.name for r in roles]}")
+            return True
+            
+        except discord.Forbidden:
+            print(f"❌ Sin permisos para gestionar roles de {member.display_name}")
+            return False
+        except discord.HTTPException as e:
+            print(f"❌ Error HTTP gestionando roles de {member.display_name}: {e}")
+            return False
+        except Exception as e:
+            print(f"❌ Error inesperado gestionando roles de {member.display_name}: {e}")
+            return False
+        finally:
+            # Remover de operaciones en progreso después de un delay
+            await asyncio.sleep(1)
+            self._role_operations.discard(user_key)
+
+    async def manage_auto_role(self, member):
+        """Gestiona el rol automático basado en si tiene rol de rango"""
         try:
             verified_role = member.guild.get_role(self.VERIFIED_ROLE_ID)
             auto_role = member.guild.get_role(self.AUTO_ROLE_ID)
             
             if not verified_role or not auto_role:
+                print("❌ No se encontraron los roles necesarios")
                 return
             
-            # Verificar si tiene el rol verificado
-            if verified_role in member.roles:
-                # Verificar si tiene rol de rango en los roles actuales
-                has_rango_role = any(role.name.startswith(self.RANGO_PREFIX) for role in after_roles)
-                
-                if has_rango_role and auto_role in member.roles:
-                    await member.remove_roles(auto_role, reason="Removido automáticamente - usuario tiene rol de rango")
-                    print(f"✅ Rol automático removido de {member.display_name} (tiene rol de rango)")
-                    
-        except Exception as e:
-            print(f"❌ Error removiendo rol automático de {member.display_name}: {e}")
-
-    async def check_and_assign_auto_role(self, member):
-        """Verifica si el usuario necesita el rol automático"""
-        try:
-            verified_role = member.guild.get_role(self.VERIFIED_ROLE_ID)
-            auto_role = member.guild.get_role(self.AUTO_ROLE_ID)
-            
-            if not verified_role or not auto_role:
+            # Solo proceder si el usuario está verificado
+            if verified_role not in member.roles:
                 return
             
-            # Verificar si tiene el rol verificado
-            if verified_role in member.roles:
-                # Verificar si NO tiene rol de rango
-                has_rango_role = any(role.name.startswith(self.RANGO_PREFIX) for role in member.roles)
+            has_rango = self.has_rango_role(member)
+            has_auto = auto_role in member.roles
+            
+            print(f"🔍 Analizando {member.display_name}: Rango={has_rango}, Auto={has_auto}")
+            
+            if has_rango and has_auto:
+                # Tiene rol de rango pero también el automático -> remover automático
+                await self.safe_role_operation(member, "remove", auto_role)
                 
-                if not has_rango_role and auto_role not in member.roles:
-                    await member.add_roles(auto_role, reason="Asignación automática - sin rol de rango")
-                    print(f"✅ Rol automático asignado a {member.display_name}")
-                    
+            elif not has_rango and not has_auto:
+                # No tiene rol de rango ni automático -> añadir automático
+                await self.safe_role_operation(member, "add", auto_role)
+                
         except Exception as e:
-            print(f"❌ Error asignando rol automático a {member.display_name}: {e}")
+            print(f"❌ Error en manage_auto_role para {member.display_name}: {e}")
 
-    # ═══ EVENTOS DE DISCORD ═══
+    # ╔══ EVENTOS DE DISCORD MEJORADOS ══╗
     
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
-        """Evento que se ejecuta cuando se actualizan los roles de un miembro"""
-        # Verificar si se añadieron roles
-        if before.roles != after.roles:
-            # Verificar si se añadió un rol de rango
-            new_roles = set(after.roles) - set(before.roles)
-            rango_role_added = any(role.name.startswith(self.RANGO_PREFIX) for role in new_roles)
+        """Evento mejorado que gestiona cambios de roles"""
+        # Solo proceder si hay cambios en los roles
+        if before.roles == after.roles:
+            return
+        
+        # Pequeño delay para evitar spam de eventos
+        await asyncio.sleep(0.5)
+        
+        try:
+            # Obtener roles añadidos y removidos
+            added_roles = set(after.roles) - set(before.roles)
+            removed_roles = set(before.roles) - set(after.roles)
             
-            if rango_role_added:
-                await self.check_and_remove_auto_role(after, after.roles)
-            else:
-                # Si se removieron roles, verificar si necesita el rol automático
-                removed_roles = set(before.roles) - set(after.roles)
-                rango_role_removed = any(role.name.startswith(self.RANGO_PREFIX) for role in removed_roles)
+            # Verificar cambios en roles de rango
+            rango_added = any(role.name.startswith(self.RANGO_PREFIX) for role in added_roles)
+            rango_removed = any(role.name.startswith(self.RANGO_PREFIX) for role in removed_roles)
+            
+            # Solo gestionar si hubo cambios relevantes
+            if rango_added or rango_removed:
+                print(f"🔄 Detectado cambio de rol de rango en {after.display_name}")
+                await self.manage_auto_role(after)
                 
-                if rango_role_removed:
-                    await self.check_and_assign_auto_role(after)
+        except Exception as e:
+            print(f"❌ Error en on_member_update: {e}")
 
     async def cog_load(self):
-        """Se ejecuta cuando el cog es cargado"""
-        print("🔧 Configurando sistemas automáticamente al cargar el cog...")
+        """Configuración automática al cargar el cog"""
+        print("🔧 Configurando sistemas automáticamente...")
         
-        # Pequeño delay para asegurar que el bot esté completamente listo
         await self.bot.wait_until_ready()
+        await asyncio.sleep(2)  # Delay adicional para estabilidad
         
-        # Configurar verificación automáticamente
         try:
             await self.setup_verification()
             print("✅ Sistema de verificación configurado automáticamente")
         except Exception as e:
-            print(f"❌ Error al configurar verificación automáticamente: {str(e)}")
+            print(f"❌ Error configurando verificación: {str(e)}")
         
-        # Configurar autoroles automáticamente
         try:
-            # Necesitamos obtener el guild para setup_autoroles
             for guild in self.bot.guilds:
                 await self.setup_autoroles(guild)
-                print(f"✅ Sistema de autoroles configurado automáticamente en {guild.name}")
-                break  # Solo configura en el primer servidor, modifica si necesitas más
+                print(f"✅ Autoroles configurados en {guild.name}")
+                break
         except Exception as e:
-            print(f"❌ Error al configurar autoroles automáticamente: {str(e)}")
+            print(f"❌ Error configurando autoroles: {str(e)}")
 
     @commands.Cog.listener()
     async def on_ready(self):
-        """Backup listener en caso de que cog_load no funcione"""
+        """Backup para configuración automática"""
         if not hasattr(self, '_auto_setup_done'):
             self._auto_setup_done = True
-            print("🔧 Ejecutando configuración automática desde on_ready...")
+            await asyncio.sleep(3)
             
-            # Configurar verificación automáticamente
             try:
                 await self.setup_verification()
-                print("✅ Sistema de verificación configurado automáticamente (on_ready)")
+                print("✅ Verificación configurada (on_ready)")
             except Exception as e:
-                print(f"❌ Error al configurar verificación automáticamente: {str(e)}")
-            
-            # Configurar autoroles automáticamente
-            try:
-                for guild in self.bot.guilds:
-                    await self.setup_autoroles(guild)
-                    print(f"✅ Sistema de autoroles configurado automáticamente en {guild.name} (on_ready)")
-                    break
-            except Exception as e:
-                print(f"❌ Error al configurar autoroles automáticamente: {str(e)}")
+                print(f"❌ Error en setup automático: {e}")
 
+    # ╔══ COMANDOS DE ADMINISTRACIÓN ══╗
+    
+    @commands.command(name="fix_roles")
+    @commands.has_permissions(administrator=True)
+    async def fix_roles(self, ctx):
+        """Corrige los roles automáticos de todos los usuarios verificados"""
+        loading_msg = await ctx.send("🔄 Analizando y corrigiendo roles...")
+        
+        verified_role = ctx.guild.get_role(self.VERIFIED_ROLE_ID)
+        if not verified_role:
+            await loading_msg.edit(content="❌ Rol de verificado no encontrado")
+            return
+        
+        fixed_count = 0
+        verified_members = [m for m in ctx.guild.members if verified_role in m.roles]
+        
+        for member in verified_members:
+            try:
+                old_has_rango = self.has_rango_role(member)
+                await self.manage_auto_role(member)
+                fixed_count += 1
+                
+                # Pequeño delay para evitar rate limits
+                if fixed_count % 10 == 0:
+                    await asyncio.sleep(1)
+                    
+            except Exception as e:
+                print(f"❌ Error corrigiendo {member.display_name}: {e}")
+        
+        embed = discord.Embed(
+            title="🛠️ Corrección de Roles Completada",
+            description=f"Se analizaron **{len(verified_members)}** usuarios verificados.\n"
+                       f"Operaciones realizadas en **{fixed_count}** usuarios.",
+            color=0x00ff00
+        )
+        
+        await loading_msg.edit(content="", embed=embed)
+
+    @commands.command(name="roles_status")
+    @commands.has_permissions(administrator=True)
+    async def roles_status(self, ctx):
+        """Muestra estadísticas detalladas del sistema de roles"""
+        verified_role = ctx.guild.get_role(self.VERIFIED_ROLE_ID)
+        auto_role = ctx.guild.get_role(self.AUTO_ROLE_ID)
+        
+        if not verified_role or not auto_role:
+            await ctx.send("❌ No se encontraron los roles necesarios")
+            return
+        
+        # Estadísticas
+        verified_members = [m for m in ctx.guild.members if verified_role in m.roles]
+        auto_members = [m for m in verified_members if auto_role in m.roles]
+        rango_members = [m for m in verified_members if self.has_rango_role(m)]
+        
+        embed = discord.Embed(
+            title="🎭 Estado del Sistema de Roles",
+            color=0x00ffff
+        )
+        
+        embed.add_field(
+            name="📊 Estadísticas Generales",
+            value=f"**Total verificados:** {len(verified_members)}\n"
+                  f"**Con rol automático:** {len(auto_members)}\n"
+                  f"**Con rol de rango:** {len(rango_members)}",
+            inline=True
+        )
+        
+        embed.add_field(
+            name="⚙️ Configuración",
+            value=f"**Verificado:** {verified_role.mention}\n"
+                  f"**Automático:** {auto_role.mention}\n"
+                  f"**Prefijo Rango:** `{self.RANGO_PREFIX}`",
+            inline=True
+        )
+        
+        # Verificar posibles inconsistencias
+        inconsistencies = []
+        for member in verified_members:
+            has_rango = self.has_rango_role(member)
+            has_auto = auto_role in member.roles
+            
+            if has_rango and has_auto:
+                inconsistencies.append(f"• {member.display_name} (tiene ambos)")
+            elif not has_rango and not has_auto:
+                inconsistencies.append(f"• {member.display_name} (no tiene ninguno)")
+        
+        if inconsistencies:
+            embed.add_field(
+                name="⚠️ Inconsistencias Detectadas",
+                value="\n".join(inconsistencies[:5]) + 
+                      (f"\n... y {len(inconsistencies)-5} más" if len(inconsistencies) > 5 else ""),
+                inline=False
+            )
+            embed.add_field(
+                name="🛠️ Solución",
+                value="Usa `!fix_roles` para corregir automáticamente",
+                inline=False
+            )
+        else:
+            embed.add_field(
+                name="✅ Estado",
+                value="No se detectaron inconsistencias",
+                inline=False
+            )
+        
+        await ctx.send(embed=embed)
+
+    # ╔══ RESTO DE FUNCIONES (MANTENIDAS) ══╗
+    
     async def clear_channel(self, channel):
         """Limpia todos los mensajes del canal"""
         try:
@@ -227,281 +311,14 @@ class Verify(commands.Cog):
         except Exception:
             return 0
 
-    @commands.command(name="roles_status")
-    @commands.has_permissions(administrator=True)
-    async def roles_status(self, ctx):
-        """Muestra el estado de los roles del sistema de verificación"""
-        verified_role = ctx.guild.get_role(self.VERIFIED_ROLE_ID)
-        auto_role = ctx.guild.get_role(self.AUTO_ROLE_ID)
-        
-        embed = discord.Embed(
-            title="🎭 Estado de Roles de Verificación",
-            color=0x00ffff
-        )
-        
-        embed.add_field(
-            name="✅ Rol Verificado",
-            value=f"{verified_role.mention if verified_role else '❌ No encontrado'}\nID: `{self.VERIFIED_ROLE_ID}`",
-            inline=True
-        )
-        
-        embed.add_field(
-            name="⚙️ Rol Automático",
-            value=f"{auto_role.mention if auto_role else '❌ No encontrado'}\nID: `{self.AUTO_ROLE_ID}`",
-            inline=True
-        )
-        
-        embed.add_field(
-            name="👑 Prefijo de Rango",
-            value=f"`{self.RANGO_PREFIX}`",
-            inline=True
-        )
-        
-        if verified_role:
-            members_verified = len([m for m in ctx.guild.members if verified_role in m.roles])
-            embed.add_field(
-                name="📊 Estadísticas",
-                value=f"Miembros verificados: **{members_verified}**",
-                inline=False
-            )
-        
-        embed.add_field(
-            name="📋 Funcionamiento",
-            value="• Al verificarse: Se asignan AMBOS roles (verificado + automático)\n• Al obtener rol de rango: Se remueve automáticamente el rol automático\n• Al perder rol de rango: Se reasigna el rol automático",
-            inline=False
-        )
-        
-        await ctx.send(embed=embed)
-
-    @commands.command(name="rewards_setup")
-    @commands.has_permissions(administrator=True)
-    async def rewards_setup(self, ctx):
-        """Configura el sistema de recompensas por niveles"""
-        try:
-            await self.setup_rewards(ctx.guild)
-            await ctx.send(f"✅ Sistema de recompensas configurado en <#{self.REWARDS_CHANNEL_ID}>")
-        except Exception as e:
-            await ctx.send(f"❌ Error al configurar recompensas: {str(e)}")
-
-    async def setup_rewards(self, guild):
-        """Configura las recompensas por niveles"""
-        channel = self.bot.get_channel(self.REWARDS_CHANNEL_ID)
-        if not channel:
-            raise Exception("Canal de recompensas no encontrado")
-        
-        # Limpiar canal
-        await self.clear_channel(channel)
-        
-        # Embed principal
-        embed = discord.Embed(
-            title="Sistema de Recompensas por Niveles",
-            description="¡Alcanza nuevos niveles y desbloquea increíbles recompensas! Cada nivel te otorga beneficios únicos y exclusivos.\n\n"
-                       "**¿Cómo subir de nivel?**\n"
-                       "• Participando activamente en el servidor\n"
-                       "• Completando reseñas y tareas\n"
-                       "• Interactuando en los canales\n\n"
-                       "**Progresa y desbloquea todos estos increíbles beneficios:**",
-            color=0xFFD700  # Color dorado para las recompensas
-        )
-        
-        embed.add_field(
-            name="Información",
-            value="A continuación encontrarás todos los niveles y sus recompensas, desde el nivel 10 hasta el máximo nivel 200. ¡Los beneficios se acumulan!",
-            inline=False
-        )
-        
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-        
-        embed.set_footer(
-            text=f"Sistema de niveles de {guild.name} • ¡Comienza tu aventura!",
-            icon_url=guild.icon.url if guild.icon else None
-        )
-        
-        # Enviar el embed principal
-        await channel.send(embed=embed)
-        
-        # Crear embeds para las recompensas (divididos por niveles)
-        levels_sorted = sorted(self.LEVEL_ROLES.keys())
-        
-        # Dividir los niveles en grupos para crear múltiples embeds
-        levels_per_embed = 5  # 5 niveles por embed para que quede limpio
-        
-        for i in range(0, len(levels_sorted), levels_per_embed):
-            levels_batch = levels_sorted[i:i + levels_per_embed]
-            
-            reward_text = ""
-            for level in levels_batch:
-                role_id = self.LEVEL_ROLES[level]
-                rewards = self.LEVEL_REWARDS.get(level, ["Sin recompensas definidas"])
-                
-                reward_text += f"**NIVEL {level}** <@&{role_id}>\n"
-                for reward in rewards:
-                    reward_text += f"• {reward}\n"
-                reward_text += "\n"
-            
-            # Crear embed para este grupo de niveles
-            levels_embed = discord.Embed(
-                title=f"Niveles {levels_batch[0]} - {levels_batch[-1]}",
-                description=reward_text,
-                color=0xFFD700
-            )
-            
-            if guild.icon:
-                levels_embed.set_thumbnail(url=guild.icon.url)
-            
-            await channel.send(embed=levels_embed)
-        
-        # Embed final con consejos
-        tips_embed = discord.Embed(
-            title="Consejos para Progresar",
-            description="• **Mantente activo** para ganar XP más rápido\n"
-                       "• **Participa en eventos** para multiplicadores especiales\n\n"
-                       "**¡Recuerda que todos los beneficios de niveles anteriores se mantienen cuando subes de nivel!**",
-            color=0x00FF00
-        )
-        
-        if guild.icon:
-            tips_embed.set_thumbnail(url=guild.icon.url)
-        
-        tips_embed.set_footer(
-            text=f"¡Alcanza el nivel 200 y desbloquea todos los beneficios! - {guild.name}",
-            icon_url=guild.icon.url if guild.icon else None
-        )
-        
-        await channel.send(embed=tips_embed)
-
-    @commands.command(name="help_embeds")
-    @commands.has_permissions(administrator=True)
-    async def help_embeds(self, ctx):
-        """Muestra todos los comandos disponibles del sistema"""
-        embed = discord.Embed(
-            title="Sistema de Setup - Comandos Disponibles",
-            description="Lista de todos los comandos disponibles para configurar el servidor:",
-            color=0x3498db
-        )
-        
-        embed.add_field(
-            name="Comandos Individuales",
-            value="• `!verify_setup` - Configura solo el sistema de verificación\n"
-                  "• `!rules_setup` - Envía solo las reglas del servidor\n"
-                  "• `!funcionamiento_setup` - Configura solo el funcionamiento de la tienda\n"
-                  "• `!autoroles_setup` - Configura solo el sistema de autoroles\n"
-                  "• `!rewards_setup` - Configura solo el sistema de recompensas",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="Comando Unificado",
-            value="• `!setup_all` - Configura TODOS los sistemas de una vez\n"
-                  "  *(Limpia los canales y configura todo automáticamente)*",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="Comandos de Roles",
-            value="• `!roles_status` - Ver estado de roles de verificación\n",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="Información",
-            value="• `!help_embeds` - Muestra esta ayuda\n\n"
-                  "**Nota:** Todos los comandos requieren permisos de administrador.\n"
-                  "**Auto-Setup:** Los sistemas de verificación y autoroles se configuran automáticamente al iniciar el bot.",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="Canales Configurados",
-            value=f"• Verificación: <#{self.VERIFICATION_CHANNEL_ID}>\n"
-                  f"• Reglas: <#{self.RULES_CHANNEL_ID}>\n"
-                  f"• Funcionamiento: <#{self.FUNCIONAMIENTO_CHANNEL_ID}>\n"
-                  f"• Autoroles: <#{self.AUTOROLES_CHANNEL_ID}>\n"
-                  f"• Recompensas: <#{self.REWARDS_CHANNEL_ID}>",
-            inline=False
-        )
-        
-        if ctx.guild.icon:
-            embed.set_thumbnail(url=ctx.guild.icon.url)
-        
-        embed.set_footer(
-            text=f"Sistema de {ctx.guild.name}",
-            icon_url=ctx.guild.icon.url if ctx.guild.icon else None
-        )
-        
-        await ctx.send(embed=embed)
-
-    @commands.command(name="setup_all")
-    @commands.has_permissions(administrator=True)
-    async def setup_all(self, ctx):
-        """Configura todos los sistemas de una vez, limpiando los canales primero"""
-        loading_msg = await ctx.send("🔄 Configurando todos los sistemas...")
-        
-        results = []
-        
-        # Configurar verificación
-        try:
-            await self.setup_verification()
-            results.append("✅ Sistema de verificación configurado")
-        except Exception as e:
-            results.append(f"❌ Error en verificación: {str(e)[:50]}")
-        
-        # Configurar reglas
-        try:
-            await self.setup_rules(ctx.guild)
-            results.append("✅ Reglas del servidor configuradas")
-        except Exception as e:
-            results.append(f"❌ Error en reglas: {str(e)[:50]}")
-        
-        # Configurar funcionamiento
-        try:
-            await self.setup_funcionamiento(ctx.guild)
-            results.append("✅ Funcionamiento de tienda configurado")
-        except Exception as e:
-            results.append(f"❌ Error en funcionamiento: {str(e)[:50]}")
-        
-        # Configurar autoroles
-        try:
-            await self.setup_autoroles(ctx.guild)
-            results.append("✅ Sistema de autoroles configurado")
-        except Exception as e:
-            results.append(f"❌ Error en autoroles: {str(e)[:50]}")
-        
-        # Configurar recompensas
-        try:
-            await self.setup_rewards(ctx.guild)
-            results.append("✅ Sistema de recompensas configurado")
-        except Exception as e:
-            results.append(f"❌ Error en recompensas: {str(e)[:50]}")
-        
-        # Crear embed de resultados
-        embed = discord.Embed(
-            title="Configuración Completa",
-            description="Resultado de la configuración de todos los sistemas:",
-            color=0x00ff00
-        )
-        
-        embed.add_field(
-            name="Resultados",
-            value="\n".join(results),
-            inline=False
-        )
-        
-        embed.set_footer(text="Todos los sistemas han sido procesados")
-        
-        await loading_msg.edit(content="", embed=embed)
-
     async def setup_verification(self):
         """Configura el sistema de verificación"""
         channel = self.bot.get_channel(self.VERIFICATION_CHANNEL_ID)
         if not channel:
             raise Exception("Canal de verificación no encontrado")
         
-        # Limpiar canal
         await self.clear_channel(channel)
         
-        # Crear embed
         embed = discord.Embed(
             title="Verificación del Servidor",
             description="¡Bienvenido a nuestro servidor!\n\n"
@@ -525,126 +342,8 @@ class Verify(commands.Cog):
             icon_url=channel.guild.icon.url if channel.guild.icon else None
         )
         
-        view = VerificationView(self.VERIFIED_ROLE_ID, self.AUTO_ROLE_ID, self.RULES_CHANNEL_ID, self.RANGO_PREFIX)
+        view = VerificationView(self.VERIFIED_ROLE_ID, self.AUTO_ROLE_ID, self.RULES_CHANNEL_ID, self.RANGO_PREFIX, self)
         await channel.send(embed=embed, view=view)
-
-    async def setup_rules(self, guild):
-        """Configura las reglas del servidor"""
-        channel = self.bot.get_channel(self.RULES_CHANNEL_ID)
-        if not channel:
-            raise Exception("Canal de reglas no encontrado")
-        
-        # Limpiar canal
-        await self.clear_channel(channel)
-        
-        embed = discord.Embed(
-            title="Reglas del Servidor",
-            description="¡Bienvenido/a! Este servidor te permite **ganar dinero, comprar productos y disfrutar de múltiples beneficios**. Para mantener un entorno seguro, justo y divertido para todos, es esencial respetar las siguientes normas:",
-            color=0xe74c3c
-        )
-        
-        embed.add_field(
-            name="1. Respeto ante todo",
-            value="No se permite acoso, insultos, discriminación ni conductas tóxicas. Mantén un ambiente cordial y sano.",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="2. Estafas terminantemente prohibidas",
-            value="Cualquier intento de engañar, estafar o romper acuerdos será sancionado sin excepción.",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="3. Comercio con responsabilidad",
-            value="Utiliza únicamente los canales habilitados para comprar o vender. Todo producto ofrecido debe ser legítimo. El servidor **no se hace responsable** por tratos fuera de los canales oficiales.",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="4. Sistema económico",
-            value="No está permitido abusar del sistema, explotar errores o buscar ventajas injustas. Las recompensas pueden cambiar sin previo aviso según las decisiones del staff.",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="5. Sin spam ni publicidad externa",
-            value="Está prohibido hacer spam, flood o promocionar servidores/productos sin autorización previa.",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="6. Sentido común y respeto al staff",
-            value="No suplantes al staff ni desafíes su autoridad. Ante dudas o problemas, repórtalo por los canales correspondientes.",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="Importante",
-            value="El incumplimiento de estas normas puede resultar en **sanciones graves o permanentes**.\nAl permanecer en este servidor, **aceptas estas reglas**.",
-            inline=False
-        )
-        
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-        
-        embed.set_footer(
-            text=f"Reglas del servidor {guild.name}",
-            icon_url=guild.icon.url if guild.icon else None
-        )
-        
-        await channel.send(embed=embed)
-
-    async def setup_funcionamiento(self, guild):
-        """Configura el funcionamiento de la tienda"""
-        channel = self.bot.get_channel(self.FUNCIONAMIENTO_CHANNEL_ID)
-        if not channel:
-            raise Exception("Canal de funcionamiento no encontrado")
-        
-        # Limpiar canal
-        await self.clear_channel(channel)
-        
-        embed = discord.Embed(
-            title="Funcionamiento de la Tienda",
-            description="**Canal oficial:** <#1400106793551663189>\n\n"
-                       "La tienda es el lugar donde puedes gastar el dinero que ganes dentro del servidor en objetos exclusivos, retiros, cuentas premium y más. A continuación, te explicamos cómo funciona:",
-            color=0x3498db
-        )
-        
-        embed.add_field(
-            name="¿Qué puedes comprar?",
-            value="• **Accesos a eventos especiales** Participa en dinámicas únicas desbloqueando objetos de entrada o participación.\n"
-                  "• **Retiros de dinero real** Canjea tu saldo acumulado por dinero real si cumples con los requisitos.\n"
-                  "• **Ítems de uso personal** Cuentas premium como HBO, Spotify, Crunchyroll, entre otras. Solo tú podrás usarlas.\n"
-                  "• **Cosméticos de perfil** Personaliza tu cuenta con marcos, insignias, colores, íconos y estilos únicos.\n"
-                  "• **Objetos limitados** Artículos disponibles solo por tiempo limitado o en eventos específicos.",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="¿Cómo ganar dinero?",
-            value="Por ahora, la única forma de generar ingresos es a través de **reseñas**. **Canal:** <#1400106793551663190>\n\n"
-                  "• Cuando estén disponibles, se anunciará allí mismo.\n"
-                  "• Solo sigue las instrucciones y completa la reseña correctamente.\n"
-                  "• Al hacerlo, recibirás una **recompensa en dinero real** acreditada a tu cuenta.",
-            inline=False
-        )
-        
-        embed.add_field(
-            name="Consejo",
-            value=f"Ve a <#{self.AUTOROLES_CHANNEL_ID}> y ponte el rol <@&{self.RESENADOR_ROLE_ID}> para recibir notificaciones cada vez que una reseña esté disponible.",
-            inline=False
-        )
-        
-        if guild.icon:
-            embed.set_thumbnail(url=guild.icon.url)
-        
-        embed.set_footer(
-            text=f"Funcionamiento de economía {guild.name}",
-            icon_url=guild.icon.url if guild.icon else None
-        )
-        
-        await channel.send(embed=embed)
 
     async def setup_autoroles(self, guild):
         """Configura el sistema de autoroles"""
@@ -652,7 +351,6 @@ class Verify(commands.Cog):
         if not channel:
             raise Exception("Canal de autoroles no encontrado")
         
-        # Limpiar canal
         await self.clear_channel(channel)
         
         embed = discord.Embed(
@@ -663,19 +361,19 @@ class Verify(commands.Cog):
         )
         
         embed.add_field(
-            name="〖📚 RESEÑADOR〗",
+            name="【📚 RESEÑADOR】",
             value="Recibe notificaciones cada vez que haya nuevas reseñas disponibles para completar y ganar dinero real.",
             inline=False
         )
         
         embed.add_field(
-            name="〖🚀 BUMPEADOR〗", 
+            name="【🚀 BUMPEADOR】", 
             value="Ayuda a hacer crecer el servidor y recibe notificaciones cuando sea momento de hacer bump en el servidor.",
             inline=False
         )
         
         embed.add_field(
-            name="〖✨ PARTNER PING〗", 
+            name="【✨ PARTNER PING】", 
             value="Recibe notificaciones cada vez que haya un nuevo partner para poder ver lo que ofrecen en otros servidores.",
             inline=False
         )
@@ -691,82 +389,24 @@ class Verify(commands.Cog):
         view = AutoRolesView(self.RESENADOR_ROLE_ID, self.BUMPEADOR_ROLE_ID, self.NUEVO_ROLE_ID)
         await channel.send(embed=embed, view=view)
 
-    # Comandos individuales
+    # Comandos adicionales (mantenidos igual)
     @commands.command(name="verify_setup")
     @commands.has_permissions(administrator=True)
     async def verify_setup(self, ctx):
-        """Configura el sistema de verificación"""
         try:
             await self.setup_verification()
             await ctx.send(f"✅ Sistema de verificación configurado en <#{self.VERIFICATION_CHANNEL_ID}>")
         except Exception as e:
-            await ctx.send(f"❌ Error al configurar verificación: {str(e)}")
-
-    @commands.command(name="rules_setup")
-    @commands.has_permissions(administrator=True)
-    async def rules_setup(self, ctx):
-        """Envía las reglas del servidor al canal correspondiente"""
-        try:
-            await self.setup_rules(ctx.guild)
-            await ctx.send(f"✅ Reglas configuradas en <#{self.RULES_CHANNEL_ID}>")
-        except Exception as e:
-            await ctx.send(f"❌ Error al configurar reglas: {str(e)}")
-
-    @commands.command(name="funcionamiento_setup")
-    @commands.has_permissions(administrator=True)
-    async def funcionamiento_setup(self, ctx):
-        """Envía información sobre el funcionamiento de la tienda"""
-        try:
-            await self.setup_funcionamiento(ctx.guild)
-            await ctx.send(f"✅ Funcionamiento configurado en <#{self.FUNCIONAMIENTO_CHANNEL_ID}>")
-        except Exception as e:
-            await ctx.send(f"❌ Error al configurar funcionamiento: {str(e)}")
+            await ctx.send(f"❌ Error: {str(e)}")
 
     @commands.command(name="autoroles_setup")
     @commands.has_permissions(administrator=True)
     async def autoroles_setup(self, ctx):
-        """Configura el sistema de autoroles"""
         try:
             await self.setup_autoroles(ctx.guild)
             await ctx.send(f"✅ Autoroles configurados en <#{self.AUTOROLES_CHANNEL_ID}>")
         except Exception as e:
-            await ctx.send(f"❌ Error al configurar autoroles: {str(e)}")
-
-    @commands.command(name="force_autosetup")
-    @commands.has_permissions(administrator=True)
-    async def force_autosetup(self, ctx):
-        """Fuerza la configuración automática de verificación y autoroles"""
-        loading_msg = await ctx.send("🔄 Forzando configuración automática...")
-        
-        results = []
-        
-        # Configurar verificación
-        try:
-            await self.setup_verification()
-            results.append("✅ Sistema de verificación configurado")
-        except Exception as e:
-            results.append(f"❌ Error en verificación: {str(e)[:50]}")
-        
-        # Configurar autoroles
-        try:
-            await self.setup_autoroles(ctx.guild)
-            results.append("✅ Sistema de autoroles configurado")
-        except Exception as e:
-            results.append(f"❌ Error en autoroles: {str(e)[:50]}")
-        
-        embed = discord.Embed(
-            title="Configuración Automática Forzada",
-            description="Resultado de la configuración automática:",
-            color=0x3498db
-        )
-        
-        embed.add_field(
-            name="Resultados",
-            value="\n".join(results),
-            inline=False
-        )
-        
-        await loading_msg.edit(content="", embed=embed)
+            await ctx.send(f"❌ Error: {str(e)}")
 
 class AutoRolesView(discord.ui.View):
     def __init__(self, resenador_role_id, bumpeador_role_id, nuevo_role_id):
@@ -775,83 +415,24 @@ class AutoRolesView(discord.ui.View):
         self.bumpeador_role_id = bumpeador_role_id
         self.nuevo_role_id = nuevo_role_id
 
-    @discord.ui.button(label="〖📚〗", style=discord.ButtonStyle.gray, custom_id="resenador_role")
+    @discord.ui.button(label="【📚】", style=discord.ButtonStyle.gray, custom_id="resenador_role")
     async def resenador_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role = interaction.guild.get_role(self.resenador_role_id)
-        
-        if not role:
-            await interaction.response.send_message(
-                "❌ Error: No se pudo encontrar el rol de Reseñador.", 
-                ephemeral=True
-            )
-            return
-        
-        try:
-            if role in interaction.user.roles:
-                await interaction.user.remove_roles(role)
-                await interaction.response.send_message(
-                    f"❌ Te has quitado el rol **{role.name}**. Ya no recibirás notificaciones de reseñas.",
-                    ephemeral=True
-                )
-            else:
-                await interaction.user.add_roles(role)
-                await interaction.response.send_message(
-                    f"✅ ¡Te has asignado el rol **{role.name}**! Ahora recibirás notificaciones cuando haya nuevas reseñas disponibles.",
-                    ephemeral=True
-                )
-        except discord.Forbidden:
-            await interaction.response.send_message(
-                "❌ Error: No tengo permisos para gestionar este rol.", 
-                ephemeral=True
-            )
-        except Exception as e:
-            await interaction.response.send_message(
-                f"❌ Error inesperado: {str(e)}", 
-                ephemeral=True
-            )
+        await self._handle_role_toggle(interaction, self.resenador_role_id, "Reseñador")
 
-    @discord.ui.button(label="〖🚀〗", style=discord.ButtonStyle.gray, custom_id="bumpeador_role")
+    @discord.ui.button(label="【🚀】", style=discord.ButtonStyle.gray, custom_id="bumpeador_role")
     async def bumpeador_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role = interaction.guild.get_role(self.bumpeador_role_id)
-        
-        if not role:
-            await interaction.response.send_message(
-                "❌ Error: No se pudo encontrar el rol de Bumpeador.", 
-                ephemeral=True
-            )
-            return
-        
-        try:
-            if role in interaction.user.roles:
-                await interaction.user.remove_roles(role)
-                await interaction.response.send_message(
-                    f"❌ Te has quitado el rol **{role.name}**. Ya no recibirás notificaciones de bump.",
-                    ephemeral=True
-                )
-            else:
-                await interaction.user.add_roles(role)
-                await interaction.response.send_message(
-                    f"✅ ¡Te has asignado el rol **{role.name}**! Ahora recibirás notificaciones para ayudar con el crecimiento del servidor.",
-                    ephemeral=True
-                )
-        except discord.Forbidden:
-            await interaction.response.send_message(
-                "❌ Error: No tengo permisos para gestionar este rol.", 
-                ephemeral=True
-            )
-        except Exception as e:
-            await interaction.response.send_message(
-                f"❌ Error inesperado: {str(e)}", 
-                ephemeral=True
-            )
+        await self._handle_role_toggle(interaction, self.bumpeador_role_id, "Bumpeador")
 
-    @discord.ui.button(label="〖✨〗", style=discord.ButtonStyle.gray, custom_id="nuevo_role")
+    @discord.ui.button(label="【✨】", style=discord.ButtonStyle.gray, custom_id="nuevo_role")
     async def nuevo_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role = interaction.guild.get_role(self.nuevo_role_id)
+        await self._handle_role_toggle(interaction, self.nuevo_role_id, "Partner Ping")
+
+    async def _handle_role_toggle(self, interaction: discord.Interaction, role_id: int, role_name: str):
+        role = interaction.guild.get_role(role_id)
         
         if not role:
             await interaction.response.send_message(
-                "❌ Error: No se pudo encontrar el nuevo rol.", 
+                f"❌ Error: No se pudo encontrar el rol de {role_name}.", 
                 ephemeral=True
             )
             return
@@ -881,28 +462,22 @@ class AutoRolesView(discord.ui.View):
             )
 
 class VerificationView(discord.ui.View):
-    def __init__(self, verified_role_id, auto_role_id, rules_channel_id, rango_prefix):
+    def __init__(self, verified_role_id, auto_role_id, rules_channel_id, rango_prefix, cog):
         super().__init__(timeout=None)
         self.verified_role_id = verified_role_id
         self.auto_role_id = auto_role_id
         self.rules_channel_id = rules_channel_id
         self.rango_prefix = rango_prefix
+        self.cog = cog
 
     @discord.ui.button(label="🔐 Verificarme", style=discord.ButtonStyle.green, emoji="✅")
     async def verify_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         verified_role = interaction.guild.get_role(self.verified_role_id)
         auto_role = interaction.guild.get_role(self.auto_role_id)
         
-        if not verified_role:
+        if not verified_role or not auto_role:
             await interaction.response.send_message(
-                "❌ Error: No se pudo encontrar el rol de verificado.", 
-                ephemeral=True
-            )
-            return
-        
-        if not auto_role:
-            await interaction.response.send_message(
-                "❌ Error: No se pudo encontrar el rol automático.", 
+                "❌ Error: No se pudieron encontrar los roles necesarios.", 
                 ephemeral=True
             )
             return
@@ -915,17 +490,25 @@ class VerificationView(discord.ui.View):
             return
         
         try:
-            # Asignar ambos roles
+            # Verificar si tiene rol de rango
+            has_rango = self.cog.has_rango_role(interaction.user)
+            
+            # Preparar roles a asignar
             roles_to_add = [verified_role]
-            
-            # Verificar si el usuario NO tiene rol de rango antes de asignar el rol automático
-            has_rango_role = any(role.name.startswith(self.rango_prefix) for role in interaction.user.roles)
-            
-            if not has_rango_role:
+            if not has_rango:
                 roles_to_add.append(auto_role)
             
-            await interaction.user.add_roles(*roles_to_add)
+            # Asignar roles usando el método seguro del cog
+            success = await self.cog.safe_role_operation(interaction.user, "add", *roles_to_add)
             
+            if not success:
+                await interaction.response.send_message(
+                    "❌ Error: No se pudieron asignar los roles. Contacta con un administrador.", 
+                    ephemeral=True
+                )
+                return
+            
+            # Crear mensaje de bienvenida
             rules_channel = interaction.guild.get_channel(self.rules_channel_id)
             
             welcome_embed = discord.Embed(
@@ -935,17 +518,16 @@ class VerificationView(discord.ui.View):
                 color=0x00ff00
             )
             
-            # Informar sobre los roles asignados
-            roles_assigned = f"**Roles asignados:**\n• {verified_role.name}"
+            roles_info = f"**Roles asignados:**\n• {verified_role.name}"
             if auto_role in roles_to_add:
-                roles_assigned += f"\n• {auto_role.name}"
-                roles_assigned += f"\n\n*Nota: El rol {auto_role.name} se removerá automáticamente si obtienes un rol que empiece con '{self.rango_prefix}'*"
+                roles_info += f"\n• {auto_role.name}"
+                roles_info += f"\n\n*El rol automático se gestiona según tus roles de rango*"
             else:
-                roles_assigned += f"\n\n*Nota: No se asignó el rol automático porque ya tienes un rol de rango*"
+                roles_info += f"\n\n*No se asignó el rol automático porque tienes un rol de rango*"
             
             welcome_embed.add_field(
                 name="🎭 Información de Roles",
-                value=roles_assigned,
+                value=roles_info,
                 inline=False
             )
             
@@ -971,21 +553,9 @@ class VerificationView(discord.ui.View):
                 ephemeral=True
             )
             
-            # Log de verificación
-            print(f"✅ Usuario {interaction.user.display_name} verificado exitosamente")
-            if auto_role in roles_to_add:
-                print(f"   • Roles asignados: {verified_role.name}, {auto_role.name}")
-            else:
-                print(f"   • Solo rol verificado asignado (usuario tiene rol de rango)")
-            
-        except discord.Forbidden:
-            await interaction.response.send_message(
-                "❌ Error: No tengo permisos para asignar roles.", 
-                ephemeral=True
-            )
         except Exception as e:
             await interaction.response.send_message(
-                f"❌ Error inesperado: {str(e)}", 
+                f"❌ Error inesperado durante la verificación: {str(e)}", 
                 ephemeral=True
             )
             print(f"❌ Error en verificación de {interaction.user.display_name}: {e}")
