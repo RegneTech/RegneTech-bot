@@ -100,7 +100,7 @@ async def connect_db():
         """)
         
         # === TABLAS DEL SISTEMA DE NIVELES ===
-        
+
         # Tabla principal de usuarios para el sistema de niveles
         await conn.execute("""
         CREATE TABLE IF NOT EXISTS levels_users (
@@ -110,17 +110,18 @@ async def connect_db():
             level INTEGER DEFAULT 1,
             last_xp_time BIGINT DEFAULT 0,
             total_messages INTEGER DEFAULT 0,
+            -- columnas nuevas para leaderboards
             weekly_xp BIGINT DEFAULT 0,
             monthly_xp BIGINT DEFAULT 0,
+            weekly_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            monthly_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             badges JSONB DEFAULT '[]'::jsonb,
             join_date BIGINT DEFAULT 0,
             voice_time INTEGER DEFAULT 0,
-            weekly_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            monthly_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (user_id, guild_id)
         );
         """)
-        
+
         # Tabla de configuración de roles por nivel
         await conn.execute("""
         CREATE TABLE IF NOT EXISTS level_roles (
@@ -130,7 +131,7 @@ async def connect_db():
             PRIMARY KEY (guild_id, level)
         );
         """)
-        
+
         # Tabla de configuración del servidor para niveles
         await conn.execute("""
         CREATE TABLE IF NOT EXISTS guild_config (
@@ -150,7 +151,7 @@ async def connect_db():
             custom_rewards JSONB DEFAULT '{}'::jsonb
         );
         """)
-        
+
         # Tabla de insignias mejorada
         await conn.execute("""
         CREATE TABLE IF NOT EXISTS badges (
@@ -164,7 +165,7 @@ async def connect_db():
             hidden BOOLEAN DEFAULT FALSE
         );
         """)
-        
+
         # Tabla de recompensas personalizadas
         await conn.execute("""
         CREATE TABLE IF NOT EXISTS custom_rewards (
@@ -175,7 +176,7 @@ async def connect_db():
             PRIMARY KEY (guild_id, level, reward_type)
         );
         """)
-        
+
         # Tabla de sesiones de voz
         await conn.execute("""
         CREATE TABLE IF NOT EXISTS voice_sessions (
@@ -187,6 +188,7 @@ async def connect_db():
             PRIMARY KEY (user_id, guild_id, join_time)
         );
         """)
+
         
         # === TABLAS DEL SISTEMA DE PARTNERS ===
         
