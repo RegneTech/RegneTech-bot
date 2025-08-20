@@ -478,27 +478,27 @@ class LevelsSystem(commands.Cog):
         )
         embed.add_field(
             name="📈 Agregar XP",
-            value="`xpc add <usuario> <cantidad>`",
+            value="`!xpc add <usuario> <cantidad>`",
             inline=False
         )
         embed.add_field(
             name="📉 Quitar XP",
-            value="`xpc remove <usuario> <cantidad>`",
+            value="`!xpc remove <usuario> <cantidad>`",
             inline=False
         )
         embed.add_field(
             name="🔧 Establecer XP",
-            value="`xpc set <usuario> <cantidad>`",
+            value="`!xpc set <usuario> <cantidad>`",
             inline=False
         )
         embed.add_field(
             name="🏆 Establecer Nivel",
-            value="`xpc setlevel <usuario> <nivel>`",
+            value="`!xpc setlevel <usuario> <nivel>`",
             inline=False
         )
         embed.add_field(
             name="⚡ Multiplicador de Rol",
-            value="`xpc multiplier <rol> <multiplicador> <horas>`",
+            value="`!xpc multiplier <rol> <multiplicador> <horas>`",
             inline=False
         )
         embed.add_field(
