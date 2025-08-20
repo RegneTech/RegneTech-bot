@@ -246,24 +246,9 @@ class LevelsSystem(commands.Cog):
             is_milestone = new_level % 10 == 0
 
             if is_milestone:
-                # Buscar rol correspondiente
-                role = None
-                if new_level in self.level_roles:
-                    role_id = self.level_roles[new_level]
-                    role = member.guild.get_role(role_id)
-
-                # Crear descripción con rol si existe
-                if role:
-                    description = (
-                        f"{member.mention} ha alcanzado el **nivel {new_level}** "
-                        f"y ha obtenido el rol {role.mention} 🎉"
-                    )
-                else:
-                    description = f"{member.mention} ha alcanzado el **nivel {new_level}** 🎉"
-
                 embed = discord.Embed(
                     title="🎉 ¡NIVEL ALCANZADO!",
-                    description=description,
+                    description=f"Nivel alcanzado: **{new_level}**",
                     color=0x00ffff
                 )
 
@@ -271,10 +256,9 @@ class LevelsSystem(commands.Cog):
                 await self.assign_level_role(member, new_level)
 
             else:
-                # Mensaje sin mención de rol en otros niveles
                 embed = discord.Embed(
                     title="⬆️ Subida de nivel",
-                    description=f"**{member.display_name}** ha alcanzado el nivel **{new_level}**",
+                    description=f"Nuevo nivel: **{new_level}**",
                     color=0x0099ff
                 )
 
@@ -282,11 +266,11 @@ class LevelsSystem(commands.Cog):
             embed.add_field(name="Nivel anterior", value=str(old_level), inline=True)
             embed.add_field(name="Nivel actual", value=str(new_level), inline=True)
 
-            await channel.send(embed=embed)
+            # 👉 Solo menciona al usuario fuera del embed
+            await channel.send(content=member.mention, embed=embed)
 
         except Exception as e:
             print(f"Error en handle_level_up: {e}")
-
     
     async def assign_level_role(self, member: discord.Member, level: int):
         """Asigna el rol correspondiente al nivel y elimina el anterior"""
