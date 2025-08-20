@@ -14,7 +14,10 @@ from database import (
     get_guild_level_config,
     add_user_xp,
     set_user_xp,
-    set_user_level
+    set_user_level,
+    get_leaderboard,
+    get_weekly_leaderboard,
+    get_monthly_leaderboard
 )
 import math
 
@@ -301,40 +304,206 @@ class LevelsSystem(commands.Cog):
         except Exception as e:
             print(f"Error asignando rol de nivel: {e}")
     
+    # ================== COMANDOS DE USUARIO ==================
+    
+    @commands.command(name="xp")
+    @commands.cooldown(1, 10, commands.BucketType.user)
+    async def user_xp(self, ctx, member: discord.Member = None):
+        """Ver tu experiencia actual o la de otro usuario"""
+        if member is None:
+            member = ctx.author
+        
+        if member.bot:
+            embed = discord.Embed(
+                title="⚠️ Error",
+                description="Los bots no tienen experiencia.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+            return
+        
+        try:
+            # Obtener datos del usuario
+            user_data = await get_user_level_data(member.id, ctx.guild.id)
+            if not user_data:
+                embed = discord.Embed(
+                    title="⚠️ Usuario no encontrado",
+                    description=f"{member.mention} no tiene datos registrados.",
+                    color=0xff0000
+                )
+                await ctx.send(embed=embed)
+                return
+            
+            # Calcular nivel y progreso
+            total_xp = user_data['xp']
+            level, current_xp, next_level_xp = self.get_level_from_total_xp(total_xp)
+            
+            # Obtener ranking
+            rank = await get_user_rank(member.id, ctx.guild.id)
+            
+            # Calcular porcentaje de progreso
+            progress_percent = (current_xp / next_level_xp * 100) if next_level_xp > 0 else 100
+            
+            # Crear embed
+            embed = discord.Embed(
+                title=f"📊 Experiencia de {member.display_name}",
+                color=0x00ffff
+            )
+            
+            embed.set_thumbnail(url=member.display_avatar.url)
+            
+            embed.add_field(name="🏆 Nivel", value=str(level), inline=True)
+            embed.add_field(name="📈 Ranking", value=f"#{rank}", inline=True)
+            embed.add_field(name="💎 XP Total", value=f"{total_xp:,}", inline=True)
+            
+            embed.add_field(
+                name="📊 Progreso en nivel",
+                value=f"{current_xp:,}/{next_level_xp:,} ({progress_percent:.1f}%)",
+                inline=False
+            )
+            
+            # Barra de progreso visual
+            progress_bar_length = 20
+            filled = int(progress_bar_length * (current_xp / next_level_xp))
+            bar = "█" * filled + "░" * (progress_bar_length - filled)
+            embed.add_field(name="⚡ Progreso", value=f"`{bar}`", inline=False)
+            
+            # XP faltante para siguiente nivel
+            xp_needed = next_level_xp - current_xp
+            embed.add_field(name="🎯 XP para siguiente nivel", value=f"{xp_needed:,}", inline=True)
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            print(f"Error en comando xp: {e}")
+            embed = discord.Embed(
+                title="⚠️ Error",
+                description="Ocurrió un error al obtener la información.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+    
+    @commands.command(name="lb", aliases=["leaderboard", "ranking"])
+    @commands.cooldown(1, 30, commands.BucketType.user)
+    async def leaderboard(self, ctx, period: str = None):
+        """Ranking global de usuarios por XP"""
+        try:
+            # Determinar el período
+            if period is None:
+                title = "🏆 Ranking Global de XP"
+                leaderboard_data = await get_leaderboard(ctx.guild.id, limit=10)
+            elif period.lower() in ['s', 'semanal', 'semana', 'week', 'weekly']:
+                title = "📅 Top XP - Esta Semana"
+                leaderboard_data = await get_weekly_leaderboard(ctx.guild.id, limit=10)
+            elif period.lower() in ['m', 'mensual', 'mes', 'month', 'monthly']:
+                title = "📆 Top XP - Este Mes"
+                leaderboard_data = await get_monthly_leaderboard(ctx.guild.id, limit=10)
+            else:
+                embed = discord.Embed(
+                    title="⚠️ Período inválido",
+                    description="Usa: `!lb` (global), `!lb s` (semanal), `!lb m` (mensual)",
+                    color=0xff0000
+                )
+                await ctx.send(embed=embed)
+                return
+            
+            if not leaderboard_data:
+                embed = discord.Embed(
+                    title="📊 Ranking vacío",
+                    description="No hay datos para mostrar.",
+                    color=0xffaa00
+                )
+                await ctx.send(embed=embed)
+                return
+            
+            embed = discord.Embed(
+                title=title,
+                color=0x00ffff
+            )
+            
+            # Emojis para las primeras posiciones
+            medals = ["🥇", "🥈", "🥉"]
+            
+            leaderboard_text = ""
+            
+            for i, user_data in enumerate(leaderboard_data, 1):
+                user_id = user_data['user_id']
+                xp = user_data['xp']
+                
+                # Obtener miembro del servidor
+                member = ctx.guild.get_member(user_id)
+                if not member:
+                    continue
+                
+                # Calcular nivel
+                level, _, _ = self.get_level_from_total_xp(xp)
+                
+                # Emoji para posición
+                if i <= 3:
+                    position_emoji = medals[i-1]
+                else:
+                    position_emoji = f"`{i}.`"
+                
+                # Formato de la entrada
+                leaderboard_text += f"{position_emoji} **{member.display_name}** - Nivel {level} ({xp:,} XP)\n"
+            
+            if leaderboard_text:
+                embed.description = leaderboard_text
+            else:
+                embed.description = "No se encontraron usuarios válidos."
+            
+            embed.set_footer(text=f"Mostrando top {len(leaderboard_data)} usuarios")
+            
+            await ctx.send(embed=embed)
+            
+        except Exception as e:
+            print(f"Error en comando leaderboard: {e}")
+            embed = discord.Embed(
+                title="⚠️ Error",
+                description="Ocurrió un error al obtener el ranking.",
+                color=0xff0000
+            )
+            await ctx.send(embed=embed)
+    
     # ================== COMANDOS DE ADMINISTRACIÓN ==================
     
-    @commands.group(name="xp", invoke_without_command=True)
+    @commands.group(name="xpcommands", invoke_without_command=True)
     @commands.has_permissions(manage_guild=True)
     async def xp_commands(self, ctx):
-        """Comandos para gestionar XP"""
+        """Comandos para gestionar XP (Solo administradores)"""
         embed = discord.Embed(
-            title="🎮 Comandos de XP",
+            title="🎮 Comandos de XP - Administración",
             description="Comandos disponibles para gestionar experiencia:",
             color=0x00ffff
         )
         embed.add_field(
             name="📈 Agregar XP",
-            value="`!xp add <usuario> <cantidad>`",
+            value="`!xpcommands add <usuario> <cantidad>`",
             inline=False
         )
         embed.add_field(
             name="📉 Quitar XP",
-            value="`!xp remove <usuario> <cantidad>`",
+            value="`!xpcommands remove <usuario> <cantidad>`",
             inline=False
         )
         embed.add_field(
-            name="📝 Establecer XP",
-            value="`!xp set <usuario> <cantidad>`",
+            name="🔧 Establecer XP",
+            value="`!xpcommands set <usuario> <cantidad>`",
             inline=False
         )
         embed.add_field(
             name="🏆 Establecer Nivel",
-            value="`!xp setlevel <usuario> <nivel>`",
+            value="`!xpcommands setlevel <usuario> <nivel>`",
             inline=False
         )
         embed.add_field(
             name="⚡ Multiplicador de Rol",
-            value="`!xp multiplier <rol> <multiplicador> <horas>`",
+            value="`!xpcommands multiplier <rol> <multiplicador> <horas>`",
+            inline=False
+        )
+        embed.add_field(
+            name="🔍 Información de Debug",
+            value="`!xpinfo <usuario>`",
             inline=False
         )
         await ctx.send(embed=embed)
@@ -345,7 +514,7 @@ class LevelsSystem(commands.Cog):
         """Agrega XP a un usuario"""
         if member.bot:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="No puedes agregar XP a un bot.",
                 color=0xff0000
             )
@@ -354,7 +523,7 @@ class LevelsSystem(commands.Cog):
         
         if amount <= 0:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="La cantidad debe ser mayor a 0.",
                 color=0xff0000
             )
@@ -374,7 +543,7 @@ class LevelsSystem(commands.Cog):
         except Exception as e:
             print(f"Error agregando XP: {e}")
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="Ocurrió un error al agregar XP.",
                 color=0xff0000
             )
@@ -386,7 +555,7 @@ class LevelsSystem(commands.Cog):
         """Quita XP a un usuario"""
         if member.bot:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="No puedes quitar XP a un bot.",
                 color=0xff0000
             )
@@ -395,7 +564,7 @@ class LevelsSystem(commands.Cog):
         
         if amount <= 0:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="La cantidad debe ser mayor a 0.",
                 color=0xff0000
             )
@@ -407,7 +576,7 @@ class LevelsSystem(commands.Cog):
             user_data = await get_user_level_data(member.id, ctx.guild.id)
             if not user_data:
                 embed = discord.Embed(
-                    title="❌ Error",
+                    title="⌚ Error",
                     description="El usuario no tiene datos registrados.",
                     color=0xff0000
                 )
@@ -430,7 +599,7 @@ class LevelsSystem(commands.Cog):
         except Exception as e:
             print(f"Error quitando XP: {e}")
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="Ocurrió un error al quitar XP.",
                 color=0xff0000
             )
@@ -442,7 +611,7 @@ class LevelsSystem(commands.Cog):
         """Establece la XP de un usuario a un valor específico"""
         if member.bot:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="No puedes establecer XP a un bot.",
                 color=0xff0000
             )
@@ -451,7 +620,7 @@ class LevelsSystem(commands.Cog):
         
         if amount < 0:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="La cantidad no puede ser negativa.",
                 color=0xff0000
             )
@@ -475,7 +644,7 @@ class LevelsSystem(commands.Cog):
         except Exception as e:
             print(f"Error estableciendo XP: {e}")
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="Ocurrió un error al establecer la XP.",
                 color=0xff0000
             )
@@ -487,7 +656,7 @@ class LevelsSystem(commands.Cog):
         """Establece el nivel de un usuario"""
         if member.bot:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="No puedes establecer nivel a un bot.",
                 color=0xff0000
             )
@@ -496,7 +665,7 @@ class LevelsSystem(commands.Cog):
         
         if level < 1 or level > 200:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="El nivel debe estar entre 1 y 200.",
                 color=0xff0000
             )
@@ -524,7 +693,7 @@ class LevelsSystem(commands.Cog):
         except Exception as e:
             print(f"Error estableciendo nivel: {e}")
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="Ocurrió un error al establecer el nivel.",
                 color=0xff0000
             )
@@ -536,7 +705,7 @@ class LevelsSystem(commands.Cog):
         """Aplica un multiplicador de XP a un rol por tiempo determinado"""
         if multiplier <= 0:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="El multiplicador debe ser mayor a 0.",
                 color=0xff0000
             )
@@ -545,7 +714,7 @@ class LevelsSystem(commands.Cog):
         
         if hours <= 0:
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="Las horas deben ser mayores a 0.",
                 color=0xff0000
             )
@@ -572,7 +741,7 @@ class LevelsSystem(commands.Cog):
         except Exception as e:
             print(f"Error aplicando multiplicador: {e}")
             embed = discord.Embed(
-                title="❌ Error",
+                title="⌚ Error",
                 description="Ocurrió un error al aplicar el multiplicador.",
                 color=0xff0000
             )
@@ -841,7 +1010,7 @@ class LevelsSystem(commands.Cog):
         
         if member.bot:
             embed = discord.Embed(
-                title="⚠ Error",
+                title="⚠️ Error",
                 description="No puedo mostrar el perfil de un bot.",
                 color=0xff0000
             )
@@ -853,7 +1022,7 @@ class LevelsSystem(commands.Cog):
             user_data = await get_user_level_data(member.id, ctx.guild.id)
             if not user_data:
                 embed = discord.Embed(
-                    title="⚠ Usuario no encontrado",
+                    title="⚠️ Usuario no encontrado",
                     description=f"{member.mention} no tiene datos registrados en el sistema de niveles.",
                     color=0xff0000
                 )
@@ -891,7 +1060,7 @@ class LevelsSystem(commands.Cog):
             print(f"Error en comando perfil: {e}")
             
             embed = discord.Embed(
-                title="⚠ Error",
+                title="⚠️ Error",
                 description="Ocurrió un error al generar el perfil. Inténtalo de nuevo más tarde.",
                 color=0xff0000
             )
@@ -920,7 +1089,7 @@ class LevelsSystem(commands.Cog):
         try:
             user_data = await get_user_level_data(member.id, ctx.guild.id)
             if not user_data:
-                await ctx.send("❌ Usuario no encontrado en la base de datos")
+                await ctx.send("⌚ Usuario no encontrado en la base de datos")
                 return
             
             total_xp = user_data['xp']
@@ -940,7 +1109,31 @@ class LevelsSystem(commands.Cog):
             await ctx.send(embed=embed)
             
         except Exception as e:
-            await ctx.send(f"❌ Error: {e}")
+            await ctx.send(f"⌚ Error: {e}")
+    
+    # ================== MANEJO DE ERRORES ==================
+    
+    @user_xp.error
+    async def xp_error(self, ctx, error):
+        """Maneja errores del comando xp"""
+        if isinstance(error, commands.CommandOnCooldown):
+            embed = discord.Embed(
+                title="⏰ Cooldown",
+                description=f"Debes esperar {error.retry_after:.0f} segundos antes de usar este comando de nuevo.",
+                color=0xffaa00
+            )
+            await ctx.send(embed=embed)
+    
+    @leaderboard.error
+    async def leaderboard_error(self, ctx, error):
+        """Maneja errores del comando leaderboard"""
+        if isinstance(error, commands.CommandOnCooldown):
+            embed = discord.Embed(
+                title="⏰ Cooldown",
+                description=f"Debes esperar {error.retry_after:.0f} segundos antes de usar este comando de nuevo.",
+                color=0xffaa00
+            )
+            await ctx.send(embed=embed)
 
 async def setup(bot: commands.Bot):
     # Crear directorios necesarios
