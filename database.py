@@ -2,7 +2,7 @@ import os
 import asyncpg
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 
 DB_URL = os.getenv("DATABASE_URL")
@@ -115,6 +115,8 @@ async def connect_db():
             badges JSONB DEFAULT '[]'::jsonb,
             join_date BIGINT DEFAULT 0,
             voice_time INTEGER DEFAULT 0,
+            weekly_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            monthly_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (user_id, guild_id)
         );
         """)
@@ -686,6 +688,34 @@ async def get_invites_stats(guild_id: int) -> dict:
 # FUNCIONES PARA EL SISTEMA DE NIVELES
 # ==========================================
 
+def get_monday_of_week():
+    """Obtiene el lunes de la semana actual en horario de España (UTC+1)"""
+    from datetime import datetime, timedelta, timezone
+    
+    # Horario de España (UTC+1)
+    spain_tz = timezone(timedelta(hours=1))
+    now = datetime.now(spain_tz)
+    
+    # Obtener el lunes de esta semana
+    days_since_monday = now.weekday()
+    monday = now - timedelta(days=days_since_monday)
+    monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    return monday
+
+def get_first_of_month():
+    """Obtiene el primer día del mes actual en horario de España (UTC+1)"""
+    from datetime import datetime, timedelta, timezone
+    
+    # Horario de España (UTC+1)
+    spain_tz = timezone(timedelta(hours=1))
+    now = datetime.now(spain_tz)
+    
+    # Primer día del mes
+    first_day = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    return first_day
+
 async def get_user_level_data(user_id: int, guild_id: int) -> dict:
     """Obtiene los datos de niveles de un usuario"""
     async with pool.acquire() as conn:
@@ -701,21 +731,32 @@ async def update_user_xp(user_id: int, guild_id: int, xp_gain: int, weekly_xp: i
     """Actualiza la XP de un usuario"""
     import time
     current_time = int(time.time())
+    monday = get_monday_of_week()
+    first_day = get_first_of_month()
     
     async with pool.acquire() as conn:
         await conn.execute("""
             INSERT INTO levels_users (
                 user_id, guild_id, xp, level, last_xp_time, total_messages, 
-                weekly_xp, monthly_xp, badges, join_date, voice_time
-            ) VALUES ($1, $2, $3, 1, $4, 1, $5, $6, '[]'::jsonb, $7, 0)
+                weekly_xp, monthly_xp, badges, join_date, voice_time, 
+                weekly_reset, monthly_reset
+            ) VALUES ($1, $2, $3, 1, $4, 1, $5, $6, '[]'::jsonb, $7, 0, $8, $9)
             ON CONFLICT (user_id, guild_id) 
             DO UPDATE SET 
                 xp = levels_users.xp + $3,
                 last_xp_time = $4,
                 total_messages = levels_users.total_messages + 1,
-                weekly_xp = levels_users.weekly_xp + $5,
-                monthly_xp = levels_users.monthly_xp + $6
-        """, user_id, guild_id, xp_gain, current_time, weekly_xp, monthly_xp, current_time)
+                weekly_xp = CASE 
+                    WHEN levels_users.weekly_reset < $8 THEN $5
+                    ELSE levels_users.weekly_xp + $5
+                END,
+                monthly_xp = CASE 
+                    WHEN levels_users.monthly_reset < $9 THEN $6
+                    ELSE levels_users.monthly_xp + $6
+                END,
+                weekly_reset = GREATEST(levels_users.weekly_reset, $8),
+                monthly_reset = GREATEST(levels_users.monthly_reset, $9)
+        """, user_id, guild_id, xp_gain, current_time, weekly_xp, monthly_xp, current_time, monday, first_day)
 
 async def set_user_xp(user_id: int, guild_id: int, xp: int):
     """Establece la XP exacta de un usuario"""
@@ -736,6 +777,68 @@ async def update_user_level(user_id: int, guild_id: int, level: int):
         await conn.execute("""
             UPDATE levels_users SET level = $1 WHERE user_id = $2 AND guild_id = $3
         """, level, user_id, guild_id)
+
+async def get_leaderboard(guild_id: int, limit: int = 10) -> list:
+    """Obtiene el ranking global por XP total"""
+    async with pool.acquire() as conn:
+        results = await conn.fetch("""
+            SELECT user_id, xp FROM levels_users 
+            WHERE guild_id = $1 AND xp > 0
+            ORDER BY xp DESC, level DESC 
+            LIMIT $2
+        """, guild_id, limit)
+        
+        return [{'user_id': row['user_id'], 'xp': row['xp']} for row in results]
+
+async def get_weekly_leaderboard(guild_id: int, limit: int = 10) -> list:
+    """Obtiene el ranking semanal por XP ganada (se reinicia cada lunes en horario España)"""
+    monday = get_monday_of_week()
+    
+    async with pool.acquire() as conn:
+        results = await conn.fetch("""
+            SELECT user_id, 
+                   CASE 
+                       WHEN weekly_reset < $2 THEN 0 
+                       ELSE weekly_xp 
+                   END as weekly_xp
+            FROM levels_users 
+            WHERE guild_id = $1 AND (
+                (weekly_reset >= $2 AND weekly_xp > 0) OR
+                (weekly_reset < $2)
+            )
+            ORDER BY CASE 
+                         WHEN weekly_reset < $2 THEN 0 
+                         ELSE weekly_xp 
+                     END DESC
+            LIMIT $3
+        """, guild_id, monday, limit)
+        
+        return [{'user_id': row['user_id'], 'xp': row['weekly_xp']} for row in results if row['weekly_xp'] > 0]
+
+async def get_monthly_leaderboard(guild_id: int, limit: int = 10) -> list:
+    """Obtiene el ranking mensual por XP ganada (se reinicia el 1ro de cada mes en horario España)"""
+    first_day = get_first_of_month()
+    
+    async with pool.acquire() as conn:
+        results = await conn.fetch("""
+            SELECT user_id, 
+                   CASE 
+                       WHEN monthly_reset < $2 THEN 0 
+                       ELSE monthly_xp 
+                   END as monthly_xp
+            FROM levels_users 
+            WHERE guild_id = $1 AND (
+                (monthly_reset >= $2 AND monthly_xp > 0) OR
+                (monthly_reset < $2)
+            )
+            ORDER BY CASE 
+                         WHEN monthly_reset < $2 THEN 0 
+                         ELSE monthly_xp 
+                     END DESC
+            LIMIT $3
+        """, guild_id, first_day, limit)
+        
+        return [{'user_id': row['user_id'], 'xp': row['monthly_xp']} for row in results if row['monthly_xp'] > 0]
 
 async def get_levels_leaderboard(guild_id: int, limit: int = 10, leaderboard_type: str = 'total') -> list:
     """Obtiene el leaderboard del servidor"""
@@ -912,19 +1015,29 @@ async def update_guild_config(guild_id: int, **kwargs):
 
 async def reset_weekly_xp(guild_id: int = None):
     """Resetea la XP semanal"""
+    monday = get_monday_of_week()
+    
     async with pool.acquire() as conn:
         if guild_id:
-            await conn.execute('UPDATE levels_users SET weekly_xp = 0 WHERE guild_id = $1', guild_id)
+            await conn.execute("""
+                UPDATE levels_users SET weekly_xp = 0, weekly_reset = $1 
+                WHERE guild_id = $2
+            """, monday, guild_id)
         else:
-            await conn.execute('UPDATE levels_users SET weekly_xp = 0')
+            await conn.execute('UPDATE levels_users SET weekly_xp = 0, weekly_reset = $1', monday)
 
 async def reset_monthly_xp(guild_id: int = None):
     """Resetea la XP mensual"""
+    first_day = get_first_of_month()
+    
     async with pool.acquire() as conn:
         if guild_id:
-            await conn.execute('UPDATE levels_users SET monthly_xp = 0 WHERE guild_id = $1', guild_id)
+            await conn.execute("""
+                UPDATE levels_users SET monthly_xp = 0, monthly_reset = $1 
+                WHERE guild_id = $2
+            """, first_day, guild_id)
         else:
-            await conn.execute('UPDATE levels_users SET monthly_xp = 0')
+            await conn.execute('UPDATE levels_users SET monthly_xp = 0, monthly_reset = $1', first_day)
 
 # ==========================================
 # FUNCIONES ADICIONALES PARA EL SISTEMA DE NIVELES
