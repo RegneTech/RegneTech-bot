@@ -139,7 +139,7 @@ class LevelsSystem(commands.Cog):
         self.user_cooldowns[user_key] = current_time
         
         # Generar XP aleatoria (10-25)
-        base_xp = random.randint(10, 25)
+        base_xp = random.randrange(5, 51, 5)
         
         # Aplicar multiplicadores de rol si existen
         multiplier = 1.0
@@ -193,7 +193,7 @@ class LevelsSystem(commands.Cog):
                     continue
                 
                 # Generar XP aleatoria adicional (5-15)
-                bonus_xp = random.randint(5, 15)
+                bonus_xp = random.randrange(5, 51, 5)
                 
                 # Aplicar multiplicadores de rol
                 multiplier = 1.0
