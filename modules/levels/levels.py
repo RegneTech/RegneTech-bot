@@ -241,37 +241,52 @@ class LevelsSystem(commands.Cog):
             channel = self.bot.get_channel(self.level_up_channel_id)
             if not channel:
                 return
-            
+
             # Verificar si es múltiplo de 10
             is_milestone = new_level % 10 == 0
-            
+
             if is_milestone:
-                # Mensaje con mención en niveles múltiplos de 10
+                # Buscar rol correspondiente
+                role = None
+                if new_level in self.level_roles:
+                    role_id = self.level_roles[new_level]
+                    role = member.guild.get_role(role_id)
+
+                # Crear descripción con rol si existe
+                if role:
+                    description = (
+                        f"{member.mention} ha alcanzado el **nivel {new_level}** "
+                        f"y ha obtenido el rol {role.mention} 🎉"
+                    )
+                else:
+                    description = f"{member.mention} ha alcanzado el **nivel {new_level}** 🎉"
+
                 embed = discord.Embed(
                     title="🎉 ¡NIVEL ALCANZADO!",
-                    description=f"{member.mention} ha alcanzado el **nivel {new_level}**!",
+                    description=description,
                     color=0x00ffff
                 )
-                
+
                 # Asignar rol correspondiente
                 await self.assign_level_role(member, new_level)
-                
+
             else:
-                # Mensaje sin mención en otros niveles
+                # Mensaje sin mención de rol en otros niveles
                 embed = discord.Embed(
                     title="⬆️ Subida de nivel",
                     description=f"**{member.display_name}** ha alcanzado el nivel **{new_level}**",
                     color=0x0099ff
                 )
-            
+
             embed.set_thumbnail(url=member.display_avatar.url)
             embed.add_field(name="Nivel anterior", value=str(old_level), inline=True)
             embed.add_field(name="Nivel actual", value=str(new_level), inline=True)
-            
+
             await channel.send(embed=embed)
-            
+
         except Exception as e:
             print(f"Error en handle_level_up: {e}")
+
     
     async def assign_level_role(self, member: discord.Member, level: int):
         """Asigna el rol correspondiente al nivel y elimina el anterior"""
