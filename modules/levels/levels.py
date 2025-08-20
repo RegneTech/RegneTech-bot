@@ -6,6 +6,7 @@ import io
 import os
 import asyncio
 import random
+import time
 from datetime import datetime, timedelta
 from database import (
     get_user_level_data, 
@@ -17,7 +18,8 @@ from database import (
     set_user_level,
     get_leaderboard,
     get_weekly_leaderboard,
-    get_monthly_leaderboard
+    get_monthly_leaderboard,
+    update_user_xp
 )
 import math
 
@@ -60,9 +62,6 @@ class LevelsSystem(commands.Cog):
         # Usuarios activos para dar XP
         self.active_users = set()
         
-        # Iniciar tarea de XP automático
-        self.auto_xp_task.start()
-        
         # Tabla de XP por niveles (ÚNICA FUENTE DE VERDAD)
         self.xp_table = {
             1: 1000, 2: 1050, 3: 1100, 4: 1150, 5: 1200, 6: 1250, 7: 1300, 8: 1355,
@@ -101,6 +100,12 @@ class LevelsSystem(commands.Cog):
         # XP acumulada por nivel
         self.cumulative_xp = {}
         self._calculate_cumulative_xp()
+        
+        # Cooldowns por usuario (para evitar spam)
+        self.user_cooldowns = {}
+        
+        # Iniciar tarea de XP automático
+        self.auto_xp_task.start()
     
     def _calculate_cumulative_xp(self):
         """Calcula la XP acumulada para cada nivel"""
@@ -118,11 +123,41 @@ class LevelsSystem(commands.Cog):
     
     @commands.Cog.listener()
     async def on_message(self, message):
-        """Registra usuarios activos para dar XP"""
-        if message.author.bot:
+        """Registra usuarios activos para dar XP y da XP por mensaje"""
+        if message.author.bot or not message.guild:
             return
         
-        # Agregar usuario a la lista de activos
+        # Verificar cooldown (60 segundos por defecto)
+        current_time = time.time()
+        user_key = (message.author.id, message.guild.id)
+        
+        if user_key in self.user_cooldowns:
+            if current_time - self.user_cooldowns[user_key] < 60:
+                return
+        
+        # Actualizar cooldown
+        self.user_cooldowns[user_key] = current_time
+        
+        # Generar XP aleatoria (10-25)
+        base_xp = random.randint(10, 25)
+        
+        # Aplicar multiplicadores de rol si existen
+        multiplier = 1.0
+        for role in message.author.roles:
+            if role.id in self.xp_multipliers:
+                mult_data = self.xp_multipliers[role.id]
+                if datetime.now() < mult_data['expires']:
+                    multiplier = max(multiplier, mult_data['multiplier'])
+                else:
+                    # Eliminar multiplicador expirado
+                    del self.xp_multipliers[role.id]
+        
+        final_xp = int(base_xp * multiplier)
+        
+        # Dar XP inmediatamente y verificar level up
+        await self.add_xp_and_check_levelup(message.author, final_xp)
+        
+        # También agregar a usuarios activos para XP adicional
         self.active_users.add((message.author.id, message.guild.id))
     
     @commands.Cog.listener()
@@ -139,7 +174,7 @@ class LevelsSystem(commands.Cog):
     
     @tasks.loop(minutes=1)
     async def auto_xp_task(self):
-        """Tarea que da XP automáticamente cada minuto"""
+        """Tarea que da XP automáticamente cada minuto a usuarios activos"""
         if not self.active_users:
             return
         
@@ -157,8 +192,8 @@ class LevelsSystem(commands.Cog):
                 if not member or member.bot:
                     continue
                 
-                # Generar XP aleatoria (5-50 en múltiplos de 5)
-                base_xp = random.choice([5, 10, 15, 20, 25, 30, 35, 40, 45, 50])
+                # Generar XP aleatoria adicional (5-15)
+                bonus_xp = random.randint(5, 15)
                 
                 # Aplicar multiplicadores de rol
                 multiplier = 1.0
@@ -168,13 +203,12 @@ class LevelsSystem(commands.Cog):
                         if datetime.now() < mult_data['expires']:
                             multiplier = max(multiplier, mult_data['multiplier'])
                         else:
-                            # Eliminar multiplicador expirado
                             del self.xp_multipliers[role.id]
                 
-                final_xp = int(base_xp * multiplier)
+                final_xp = int(bonus_xp * multiplier)
                 
-                # Agregar XP y verificar level up
-                await self.add_xp_and_check_levelup(member, final_xp)
+                # Dar XP usando la función de base de datos directamente
+                await update_user_xp(user_id, guild_id, final_xp, final_xp, final_xp)
                 
             except Exception as e:
                 print(f"Error dando XP automática a {user_id}: {e}")
@@ -184,7 +218,7 @@ class LevelsSystem(commands.Cog):
         """Espera a que el bot esté listo"""
         await self.bot.wait_until_ready()
     
-    # ================== FUNCIONES AUXILIARES (CORREGIDAS) ==================
+    # ================== FUNCIONES AUXILIARES ==================
     
     def get_level_from_total_xp(self, total_xp: int) -> tuple:
         """ÚNICA función para calcular nivel desde XP total - USA LA TABLA FIJA"""
@@ -214,21 +248,21 @@ class LevelsSystem(commands.Cog):
         try:
             # Obtener datos actuales del usuario
             user_data = await get_user_level_data(member.id, member.guild.id)
-            if not user_data:
-                return
             
-            old_total_xp = user_data['xp']
+            # Si el usuario no existe, se creará automáticamente en update_user_xp
+            old_total_xp = user_data['xp'] if user_data else 0
             old_level, _, _ = self.get_level_from_total_xp(old_total_xp)
             
-            # Agregar XP
-            new_total_xp = old_total_xp + xp_amount
-            await add_user_xp(member.id, member.guild.id, xp_amount)
+            # Agregar XP usando la función de base de datos
+            await update_user_xp(member.id, member.guild.id, xp_amount, xp_amount, xp_amount)
             
             # Verificar nuevo nivel
+            new_total_xp = old_total_xp + xp_amount
             new_level, _, _ = self.get_level_from_total_xp(new_total_xp)
             
-            # Si subió de nivel
+            # Actualizar el nivel en la base de datos si cambió
             if new_level > old_level:
+                await set_user_level(member.id, member.guild.id, new_level)
                 await self.handle_level_up(member, new_level, old_level)
                 
         except Exception as e:
@@ -275,13 +309,11 @@ class LevelsSystem(commands.Cog):
             embed.add_field(name="Nivel anterior", value=str(old_level), inline=True)
             embed.add_field(name="Nivel actual", value=str(new_level), inline=True)
 
-            # 👉 Solo menciona al usuario fuera del embed
+            # Solo menciona al usuario fuera del embed
             await channel.send(content=member.mention, embed=embed)
 
         except Exception as e:
             print(f"Error en handle_level_up: {e}")
-
-
     
     async def assign_level_role(self, member: discord.Member, level: int):
         """Asigna el rol correspondiente al nivel y elimina el anterior"""
@@ -375,7 +407,7 @@ class LevelsSystem(commands.Cog):
             # Barra de progreso visual
             progress_bar_length = 20
             filled = int(progress_bar_length * (current_xp / next_level_xp))
-            bar = "█" * filled + "░" * (progress_bar_length - filled)
+            bar = "█" * filled + "▒" * (progress_bar_length - filled)
             embed.add_field(name="⚡ Progreso", value=f"`{bar}`", inline=False)
             
             # XP faltante para siguiente nivel
@@ -524,7 +556,7 @@ class LevelsSystem(commands.Cog):
         """Agrega XP a un usuario"""
         if member.bot:
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="No puedes agregar XP a un bot.",
                 color=0xff0000
             )
@@ -533,7 +565,7 @@ class LevelsSystem(commands.Cog):
         
         if amount <= 0:
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="La cantidad debe ser mayor a 0.",
                 color=0xff0000
             )
@@ -553,7 +585,7 @@ class LevelsSystem(commands.Cog):
         except Exception as e:
             print(f"Error agregando XP: {e}")
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="Ocurrió un error al agregar XP.",
                 color=0xff0000
             )
@@ -565,7 +597,7 @@ class LevelsSystem(commands.Cog):
         """Quita XP a un usuario"""
         if member.bot:
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="No puedes quitar XP a un bot.",
                 color=0xff0000
             )
@@ -574,7 +606,7 @@ class LevelsSystem(commands.Cog):
         
         if amount <= 0:
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="La cantidad debe ser mayor a 0.",
                 color=0xff0000
             )
@@ -586,7 +618,7 @@ class LevelsSystem(commands.Cog):
             user_data = await get_user_level_data(member.id, ctx.guild.id)
             if not user_data:
                 embed = discord.Embed(
-                    title="⌚ Error",
+                    title="❌ Error",
                     description="El usuario no tiene datos registrados.",
                     color=0xff0000
                 )
@@ -598,18 +630,23 @@ class LevelsSystem(commands.Cog):
             
             await set_user_xp(member.id, ctx.guild.id, new_xp)
             
+            # Recalcular nivel
+            new_level, _, _ = self.get_level_from_total_xp(new_xp)
+            await set_user_level(member.id, ctx.guild.id, new_level)
+            
             embed = discord.Embed(
                 title="✅ XP Removida",
                 description=f"Se quitaron **{amount:,} XP** a {member.mention}",
                 color=0x00ff00
             )
             embed.add_field(name="XP Total", value=f"{new_xp:,}", inline=True)
+            embed.add_field(name="Nivel", value=str(new_level), inline=True)
             await ctx.send(embed=embed)
             
         except Exception as e:
             print(f"Error quitando XP: {e}")
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="Ocurrió un error al quitar XP.",
                 color=0xff0000
             )
@@ -621,7 +658,7 @@ class LevelsSystem(commands.Cog):
         """Establece la XP de un usuario a un valor específico"""
         if member.bot:
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="No puedes establecer XP a un bot.",
                 color=0xff0000
             )
@@ -630,7 +667,7 @@ class LevelsSystem(commands.Cog):
         
         if amount < 0:
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="La cantidad no puede ser negativa.",
                 color=0xff0000
             )
@@ -641,6 +678,7 @@ class LevelsSystem(commands.Cog):
             await set_user_xp(member.id, ctx.guild.id, amount)
             
             level, current_xp, next_xp = self.get_level_from_total_xp(amount)
+            await set_user_level(member.id, ctx.guild.id, level)
             
             embed = discord.Embed(
                 title="✅ XP Establecida",
@@ -654,7 +692,7 @@ class LevelsSystem(commands.Cog):
         except Exception as e:
             print(f"Error estableciendo XP: {e}")
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="Ocurrió un error al establecer la XP.",
                 color=0xff0000
             )
@@ -666,7 +704,7 @@ class LevelsSystem(commands.Cog):
         """Establece el nivel de un usuario"""
         if member.bot:
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="No puedes establecer nivel a un bot.",
                 color=0xff0000
             )
@@ -675,7 +713,7 @@ class LevelsSystem(commands.Cog):
         
         if level < 1 or level > 200:
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="El nivel debe estar entre 1 y 200.",
                 color=0xff0000
             )
@@ -687,6 +725,7 @@ class LevelsSystem(commands.Cog):
             total_xp = self.get_total_xp_for_level(level)
             
             await set_user_xp(member.id, ctx.guild.id, total_xp)
+            await set_user_level(member.id, ctx.guild.id, level)
             
             # Asignar rol si es múltiplo de 10
             if level % 10 == 0:
@@ -703,7 +742,7 @@ class LevelsSystem(commands.Cog):
         except Exception as e:
             print(f"Error estableciendo nivel: {e}")
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="Ocurrió un error al establecer el nivel.",
                 color=0xff0000
             )
@@ -715,7 +754,7 @@ class LevelsSystem(commands.Cog):
         """Aplica un multiplicador de XP a un rol por tiempo determinado"""
         if multiplier <= 0:
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="El multiplicador debe ser mayor a 0.",
                 color=0xff0000
             )
@@ -724,7 +763,7 @@ class LevelsSystem(commands.Cog):
         
         if hours <= 0:
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="Las horas deben ser mayores a 0.",
                 color=0xff0000
             )
@@ -751,7 +790,7 @@ class LevelsSystem(commands.Cog):
         except Exception as e:
             print(f"Error aplicando multiplicador: {e}")
             embed = discord.Embed(
-                title="⌚ Error",
+                title="❌ Error",
                 description="Ocurrió un error al aplicar el multiplicador.",
                 color=0xff0000
             )
@@ -1099,7 +1138,7 @@ class LevelsSystem(commands.Cog):
         try:
             user_data = await get_user_level_data(member.id, ctx.guild.id)
             if not user_data:
-                await ctx.send("⌚ Usuario no encontrado en la base de datos")
+                await ctx.send("❌ Usuario no encontrado en la base de datos")
                 return
             
             total_xp = user_data['xp']
@@ -1119,7 +1158,7 @@ class LevelsSystem(commands.Cog):
             await ctx.send(embed=embed)
             
         except Exception as e:
-            await ctx.send(f"⌚ Error: {e}")
+            await ctx.send(f"❌ Error: {e}")
     
     # ================== MANEJO DE ERRORES ==================
     
