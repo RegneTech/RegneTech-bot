@@ -729,117 +729,308 @@ async def get_user_level_data(user_id: int, guild_id: int) -> dict:
         return None
 
 async def update_user_xp(user_id: int, guild_id: int, xp_gain: int, weekly_xp: int = 0, monthly_xp: int = 0):
-    """Actualiza la XP de un usuario"""
+    """Actualiza la XP de un usuario - VERSIÓN CORREGIDA que siempre crea el usuario si no existe"""
     import time
     current_time = int(time.time())
     monday = get_monday_of_week()
     first_day = get_first_of_month()
     
     async with pool.acquire() as conn:
-        await conn.execute("""
-            INSERT INTO levels_users (
-                user_id, guild_id, xp, level, last_xp_time, total_messages, 
-                weekly_xp, monthly_xp, badges, join_date, voice_time, 
-                weekly_reset, monthly_reset
-            ) VALUES ($1, $2, $3, 1, $4, 1, $5, $6, '[]'::jsonb, $7, 0, $8, $9)
-            ON CONFLICT (user_id, guild_id) 
-            DO UPDATE SET 
-                xp = levels_users.xp + $3,
-                last_xp_time = $4,
-                total_messages = levels_users.total_messages + 1,
-                weekly_xp = CASE 
-                    WHEN levels_users.weekly_reset < $8 THEN $5
-                    ELSE levels_users.weekly_xp + $5
-                END,
-                monthly_xp = CASE 
-                    WHEN levels_users.monthly_reset < $9 THEN $6
-                    ELSE levels_users.monthly_xp + $6
-                END,
-                weekly_reset = GREATEST(levels_users.weekly_reset, $8),
-                monthly_reset = GREATEST(levels_users.monthly_reset, $9)
-        """, user_id, guild_id, xp_gain, current_time, weekly_xp, monthly_xp, current_time, monday, first_day)
+        try:
+            # Intentar obtener el usuario actual primero
+            existing_user = await conn.fetchrow("""
+                SELECT xp, weekly_xp, monthly_xp, weekly_reset, monthly_reset 
+                FROM levels_users 
+                WHERE user_id = $1 AND guild_id = $2
+            """, user_id, guild_id)
+            
+            if existing_user:
+                # Usuario existe, actualizar
+                current_xp = existing_user['xp']
+                current_weekly_xp = existing_user['weekly_xp']
+                current_monthly_xp = existing_user['monthly_xp']
+                weekly_reset = existing_user['weekly_reset']
+                monthly_reset = existing_user['monthly_reset']
+                
+                # Verificar si necesita reset semanal
+                if weekly_reset < monday:
+                    new_weekly_xp = weekly_xp  # Resetear XP semanal
+                    weekly_reset = monday
+                else:
+                    new_weekly_xp = current_weekly_xp + weekly_xp
+                
+                # Verificar si necesita reset mensual
+                if monthly_reset < first_day:
+                    new_monthly_xp = monthly_xp  # Resetear XP mensual
+                    monthly_reset = first_day
+                else:
+                    new_monthly_xp = current_monthly_xp + monthly_xp
+                
+                # Actualizar usuario existente
+                await conn.execute("""
+                    UPDATE levels_users SET 
+                        xp = $1,
+                        last_xp_time = $2,
+                        total_messages = total_messages + 1,
+                        weekly_xp = $3,
+                        monthly_xp = $4,
+                        weekly_reset = $5,
+                        monthly_reset = $6
+                    WHERE user_id = $7 AND guild_id = $8
+                """, current_xp + xp_gain, current_time, new_weekly_xp, new_monthly_xp, 
+                    weekly_reset, monthly_reset, user_id, guild_id)
+                
+            else:
+                # Usuario no existe, crear nuevo registro
+                await conn.execute("""
+                    INSERT INTO levels_users (
+                        user_id, guild_id, xp, level, last_xp_time, total_messages, 
+                        weekly_xp, monthly_xp, badges, join_date, voice_time, 
+                        weekly_reset, monthly_reset
+                    ) VALUES ($1, $2, $3, 1, $4, 1, $5, $6, '[]'::jsonb, $7, 0, $8, $9)
+                """, user_id, guild_id, xp_gain, current_time, weekly_xp, monthly_xp, 
+                    current_time, monday, first_day)
+                
+        except Exception as e:
+            print(f"Error en update_user_xp: {e}")
+            raise e
+
+
+async def ensure_user_exists(user_id: int, guild_id: int):
+    """Asegura que un usuario existe en la base de datos, creándolo si es necesario"""
+    import time
+    current_time = int(time.time())
+    monday = get_monday_of_week()
+    first_day = get_first_of_month()
+    
+    async with pool.acquire() as conn:
+        try:
+            # Verificar si el usuario existe
+            existing = await conn.fetchrow("""
+                SELECT user_id FROM levels_users WHERE user_id = $1 AND guild_id = $2
+            """, user_id, guild_id)
+            
+            if not existing:
+                # Crear usuario nuevo con valores iniciales
+                await conn.execute("""
+                    INSERT INTO levels_users (
+                        user_id, guild_id, xp, level, last_xp_time, total_messages, 
+                        weekly_xp, monthly_xp, badges, join_date, voice_time, 
+                        weekly_reset, monthly_reset
+                    ) VALUES ($1, $2, 0, 1, 0, 0, 0, 0, '[]'::jsonb, $3, 0, $4, $5)
+                    ON CONFLICT (user_id, guild_id) DO NOTHING
+                """, user_id, guild_id, current_time, monday, first_day)
+                
+                print(f"Usuario {user_id} creado en guild {guild_id}")
+                return True
+            return False
+            
+        except Exception as e:
+            print(f"Error en ensure_user_exists: {e}")
+            return False
+
+
+async def get_user_level_data(user_id: int, guild_id: int) -> dict:
+    """Obtiene los datos de niveles de un usuario - VERSIÓN MEJORADA"""
+    async with pool.acquire() as conn:
+        try:
+            result = await conn.fetchrow("""
+                SELECT * FROM levels_users WHERE user_id = $1 AND guild_id = $2
+            """, user_id, guild_id)
+            
+            if result:
+                return dict(result)
+            else:
+                # Si el usuario no existe, crearlo automáticamente
+                await ensure_user_exists(user_id, guild_id)
+                # Intentar obtener de nuevo
+                result = await conn.fetchrow("""
+                    SELECT * FROM levels_users WHERE user_id = $1 AND guild_id = $2
+                """, user_id, guild_id)
+                
+                if result:
+                    return dict(result)
+                else:
+                    # Si aún no existe, devolver valores por defecto
+                    return {
+                        'user_id': user_id,
+                        'guild_id': guild_id,
+                        'xp': 0,
+                        'level': 1,
+                        'last_xp_time': 0,
+                        'total_messages': 0,
+                        'weekly_xp': 0,
+                        'monthly_xp': 0,
+                        'badges': [],
+                        'join_date': 0,
+                        'voice_time': 0
+                    }
+                    
+        except Exception as e:
+            print(f"Error en get_user_level_data: {e}")
+            return None
+
 
 async def set_user_xp(user_id: int, guild_id: int, xp: int):
-    """Establece la XP exacta de un usuario"""
+    """Establece la XP exacta de un usuario - VERSIÓN MEJORADA"""
     import time
     current_time = int(time.time())
     
     async with pool.acquire() as conn:
-        await conn.execute("""
-            INSERT INTO levels_users (user_id, guild_id, xp, level, join_date)
-            VALUES ($1, $2, $3, 1, $4)
-            ON CONFLICT (user_id, guild_id) 
-            DO UPDATE SET xp = $3, level = 1
-        """, user_id, guild_id, xp, current_time)
+        try:
+            # Primero asegurar que el usuario existe
+            await ensure_user_exists(user_id, guild_id)
+            
+            # Actualizar la XP
+            result = await conn.execute("""
+                UPDATE levels_users SET xp = $1 WHERE user_id = $2 AND guild_id = $3
+            """, xp, user_id, guild_id)
+            
+            # Si no se actualizó ninguna fila, algo salió mal
+            if result == "UPDATE 0":
+                print(f"Advertencia: No se pudo actualizar XP para usuario {user_id}")
+                
+        except Exception as e:
+            print(f"Error en set_user_xp: {e}")
+            raise e
 
-async def update_user_level(user_id: int, guild_id: int, level: int):
-    """Actualiza el nivel de un usuario"""
+
+async def set_user_level(user_id: int, guild_id: int, level: int):
+    """Establece el nivel exacto de un usuario - VERSIÓN MEJORADA"""
     async with pool.acquire() as conn:
-        await conn.execute("""
-            UPDATE levels_users SET level = $1 WHERE user_id = $2 AND guild_id = $3
-        """, level, user_id, guild_id)
+        try:
+            # Primero asegurar que el usuario existe
+            await ensure_user_exists(user_id, guild_id)
+            
+            # Actualizar el nivel
+            result = await conn.execute("""
+                UPDATE levels_users SET level = $1 WHERE user_id = $2 AND guild_id = $3
+            """, level, user_id, guild_id)
+            
+            # Si no se actualizó ninguna fila, algo salió mal
+            if result == "UPDATE 0":
+                print(f"Advertencia: No se pudo actualizar nivel para usuario {user_id}")
+                
+        except Exception as e:
+            print(f"Error en set_user_level: {e}")
+            raise e
+
+
+async def add_user_xp(user_id: int, guild_id: int, xp_amount: int):
+    """Agrega XP a un usuario específico - VERSIÓN MEJORADA"""
+    import time
+    current_time = int(time.time())
+    
+    # Usar la función update_user_xp mejorada
+    await update_user_xp(user_id, guild_id, xp_amount, xp_amount, xp_amount)
+
+
+async def get_user_rank(user_id: int, guild_id: int, rank_type: str = 'total') -> int:
+    """Obtiene el ranking de un usuario específico - VERSIÓN MEJORADA"""
+    async with pool.acquire() as conn:
+        try:
+            # Primero asegurar que el usuario existe
+            await ensure_user_exists(user_id, guild_id)
+            
+            if rank_type == 'weekly':
+                order_by = 'weekly_xp'
+            elif rank_type == 'monthly':
+                order_by = 'monthly_xp'
+            else:
+                order_by = 'xp'
+            
+            result = await conn.fetchrow(f"""
+                SELECT COUNT(*) + 1 as rank FROM levels_users 
+                WHERE guild_id = $1 AND {order_by} > (
+                    SELECT {order_by} FROM levels_users WHERE user_id = $2 AND guild_id = $3
+                )
+            """, guild_id, user_id, guild_id)
+            
+            return result['rank'] if result else 1
+            
+        except Exception as e:
+            print(f"Error en get_user_rank: {e}")
+            return 1
+
 
 async def get_leaderboard(guild_id: int, limit: int = 10) -> list:
-    """Obtiene el ranking global por XP total"""
+    """Obtiene el ranking global por XP total - VERSIÓN MEJORADA"""
     async with pool.acquire() as conn:
-        results = await conn.fetch("""
-            SELECT user_id, xp FROM levels_users 
-            WHERE guild_id = $1 AND xp > 0
-            ORDER BY xp DESC, level DESC 
-            LIMIT $2
-        """, guild_id, limit)
-        
-        return [{'user_id': row['user_id'], 'xp': row['xp']} for row in results]
+        try:
+            results = await conn.fetch("""
+                SELECT user_id, xp FROM levels_users 
+                WHERE guild_id = $1 AND xp > 0
+                ORDER BY xp DESC, level DESC 
+                LIMIT $2
+            """, guild_id, limit)
+            
+            return [{'user_id': row['user_id'], 'xp': row['xp']} for row in results]
+            
+        except Exception as e:
+            print(f"Error en get_leaderboard: {e}")
+            return []
+
 
 async def get_weekly_leaderboard(guild_id: int, limit: int = 10) -> list:
-    """Obtiene el ranking semanal por XP ganada (se reinicia cada lunes en horario España)"""
+    """Obtiene el ranking semanal por XP ganada - VERSIÓN MEJORADA"""
     monday = get_monday_of_week()
     
     async with pool.acquire() as conn:
-        results = await conn.fetch("""
-            SELECT user_id, 
-                   CASE 
-                       WHEN weekly_reset < $2 THEN 0 
-                       ELSE weekly_xp 
-                   END as weekly_xp
-            FROM levels_users 
-            WHERE guild_id = $1 AND (
-                (weekly_reset >= $2 AND weekly_xp > 0) OR
-                (weekly_reset < $2)
-            )
-            ORDER BY CASE 
-                         WHEN weekly_reset < $2 THEN 0 
-                         ELSE weekly_xp 
-                     END DESC
-            LIMIT $3
-        """, guild_id, monday, limit)
-        
-        return [{'user_id': row['user_id'], 'xp': row['weekly_xp']} for row in results if row['weekly_xp'] > 0]
+        try:
+            results = await conn.fetch("""
+                SELECT user_id, 
+                       CASE 
+                           WHEN weekly_reset < $2 THEN 0 
+                           ELSE weekly_xp 
+                       END as weekly_xp
+                FROM levels_users 
+                WHERE guild_id = $1 AND (
+                    (weekly_reset >= $2 AND weekly_xp > 0) OR
+                    (weekly_reset < $2)
+                )
+                ORDER BY CASE 
+                             WHEN weekly_reset < $2 THEN 0 
+                             ELSE weekly_xp 
+                         END DESC
+                LIMIT $3
+            """, guild_id, monday, limit)
+            
+            return [{'user_id': row['user_id'], 'xp': row['weekly_xp']} for row in results if row['weekly_xp'] > 0]
+            
+        except Exception as e:
+            print(f"Error en get_weekly_leaderboard: {e}")
+            return []
+
 
 async def get_monthly_leaderboard(guild_id: int, limit: int = 10) -> list:
-    """Obtiene el ranking mensual por XP ganada (se reinicia el 1ro de cada mes en horario España)"""
+    """Obtiene el ranking mensual por XP ganada - VERSIÓN MEJORADA"""
     first_day = get_first_of_month()
     
     async with pool.acquire() as conn:
-        results = await conn.fetch("""
-            SELECT user_id, 
-                   CASE 
-                       WHEN monthly_reset < $2 THEN 0 
-                       ELSE monthly_xp 
-                   END as monthly_xp
-            FROM levels_users 
-            WHERE guild_id = $1 AND (
-                (monthly_reset >= $2 AND monthly_xp > 0) OR
-                (monthly_reset < $2)
-            )
-            ORDER BY CASE 
-                         WHEN monthly_reset < $2 THEN 0 
-                         ELSE monthly_xp 
-                     END DESC
-            LIMIT $3
-        """, guild_id, first_day, limit)
-        
-        return [{'user_id': row['user_id'], 'xp': row['monthly_xp']} for row in results if row['monthly_xp'] > 0]
+        try:
+            results = await conn.fetch("""
+                SELECT user_id, 
+                       CASE 
+                           WHEN monthly_reset < $2 THEN 0 
+                           ELSE monthly_xp 
+                       END as monthly_xp
+                FROM levels_users 
+                WHERE guild_id = $1 AND (
+                    (monthly_reset >= $2 AND monthly_xp > 0) OR
+                    (monthly_reset < $2)
+                )
+                ORDER BY CASE 
+                             WHEN monthly_reset < $2 THEN 0 
+                             ELSE monthly_xp 
+                         END DESC
+                LIMIT $3
+            """, guild_id, first_day, limit)
+            
+            return [{'user_id': row['user_id'], 'xp': row['monthly_xp']} for row in results if row['monthly_xp'] > 0]
+            
+        except Exception as e:
+            print(f"Error en get_monthly_leaderboard: {e}")
+            return []
 
 async def get_levels_leaderboard(guild_id: int, limit: int = 10, leaderboard_type: str = 'total') -> list:
     """Obtiene el leaderboard del servidor"""

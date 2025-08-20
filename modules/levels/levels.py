@@ -207,8 +207,8 @@ class LevelsSystem(commands.Cog):
                 
                 final_xp = int(bonus_xp * multiplier)
                 
-                # Dar XP usando la función de base de datos directamente
-                await update_user_xp(user_id, guild_id, final_xp, final_xp, final_xp)
+                # Dar XP usando la función mejorada que verifica level up
+                await self.add_xp_and_check_levelup(member, final_xp)
                 
             except Exception as e:
                 print(f"Error dando XP automática a {user_id}: {e}")
@@ -244,19 +244,20 @@ class LevelsSystem(commands.Cog):
         return self.cumulative_xp.get(level, 0)
     
     async def add_xp_and_check_levelup(self, member: discord.Member, xp_amount: int):
-        """Agrega XP a un usuario y verifica si subió de nivel"""
+        """Agrega XP a un usuario y verifica si subió de nivel - VERSIÓN CORREGIDA"""
         try:
             # Obtener datos actuales del usuario
             user_data = await get_user_level_data(member.id, member.guild.id)
             
-            # Si el usuario no existe, se creará automáticamente en update_user_xp
+            # Determinar XP actual (0 si es usuario nuevo)
             old_total_xp = user_data['xp'] if user_data else 0
             old_level, _, _ = self.get_level_from_total_xp(old_total_xp)
             
             # Agregar XP usando la función de base de datos
+            # Esta función creará el registro si no existe
             await update_user_xp(member.id, member.guild.id, xp_amount, xp_amount, xp_amount)
             
-            # Verificar nuevo nivel
+            # Calcular nuevo nivel
             new_total_xp = old_total_xp + xp_amount
             new_level, _, _ = self.get_level_from_total_xp(new_total_xp)
             
@@ -264,6 +265,10 @@ class LevelsSystem(commands.Cog):
             if new_level > old_level:
                 await set_user_level(member.id, member.guild.id, new_level)
                 await self.handle_level_up(member, new_level, old_level)
+            else:
+                # Asegurar que el nivel esté actualizado en la base de datos
+                # incluso si no hubo cambio (especialmente importante para usuarios nuevos)
+                await set_user_level(member.id, member.guild.id, new_level)
                 
         except Exception as e:
             print(f"Error en add_xp_and_check_levelup: {e}")
@@ -368,13 +373,19 @@ class LevelsSystem(commands.Cog):
             # Obtener datos del usuario
             user_data = await get_user_level_data(member.id, ctx.guild.id)
             if not user_data:
-                embed = discord.Embed(
-                    title="⚠️ Usuario no encontrado",
-                    description=f"{member.mention} no tiene datos registrados.",
-                    color=0xff0000
-                )
-                await ctx.send(embed=embed)
-                return
+                # Si el usuario no existe, crearlo con 0 XP
+                await update_user_xp(member.id, ctx.guild.id, 0, 0, 0)
+                # Volver a obtener los datos
+                user_data = await get_user_level_data(member.id, ctx.guild.id)
+                
+                if not user_data:
+                    embed = discord.Embed(
+                        title="⚠️ Error",
+                        description="Error al crear el registro del usuario.",
+                        color=0xff0000
+                    )
+                    await ctx.send(embed=embed)
+                    return
             
             # Calcular nivel y progreso
             total_xp = user_data['xp']
@@ -406,7 +417,7 @@ class LevelsSystem(commands.Cog):
             
             # Barra de progreso visual
             progress_bar_length = 20
-            filled = int(progress_bar_length * (current_xp / next_level_xp))
+            filled = int(progress_bar_length * (current_xp / next_level_xp)) if next_level_xp > 0 else progress_bar_length
             bar = "█" * filled + "▒" * (progress_bar_length - filled)
             embed.add_field(name="⚡ Progreso", value=f"`{bar}`", inline=False)
             
@@ -617,13 +628,18 @@ class LevelsSystem(commands.Cog):
             # Obtener XP actual
             user_data = await get_user_level_data(member.id, ctx.guild.id)
             if not user_data:
-                embed = discord.Embed(
-                    title="❌ Error",
-                    description="El usuario no tiene datos registrados.",
-                    color=0xff0000
-                )
-                await ctx.send(embed=embed)
-                return
+                # Crear usuario si no existe
+                await update_user_xp(member.id, ctx.guild.id, 0, 0, 0)
+                user_data = await get_user_level_data(member.id, ctx.guild.id)
+                
+                if not user_data:
+                    embed = discord.Embed(
+                        title="❌ Error",
+                        description="Error al crear el registro del usuario.",
+                        color=0xff0000
+                    )
+                    await ctx.send(embed=embed)
+                    return
             
             current_xp = user_data['xp']
             new_xp = max(0, current_xp - amount)
@@ -1070,13 +1086,19 @@ class LevelsSystem(commands.Cog):
             # Obtener datos del usuario
             user_data = await get_user_level_data(member.id, ctx.guild.id)
             if not user_data:
-                embed = discord.Embed(
-                    title="⚠️ Usuario no encontrado",
-                    description=f"{member.mention} no tiene datos registrados en el sistema de niveles.",
-                    color=0xff0000
-                )
-                await ctx.send(embed=embed)
-                return
+                # Si el usuario no existe, crearlo con 0 XP
+                await update_user_xp(member.id, ctx.guild.id, 0, 0, 0)
+                # Volver a obtener los datos
+                user_data = await get_user_level_data(member.id, ctx.guild.id)
+                
+                if not user_data:
+                    embed = discord.Embed(
+                        title="⚠️ Error",
+                        description="Error al crear el registro del usuario.",
+                        color=0xff0000
+                    )
+                    await ctx.send(embed=embed)
+                    return
             
             # Obtener balance del usuario
             balance = await get_user_balance(member.id)
@@ -1089,7 +1111,7 @@ class LevelsSystem(commands.Cog):
             level, current_xp, next_level_xp = self.get_level_from_total_xp(total_xp)
             print(f"PERFIL DEBUG: {member.name} - XP: {total_xp}, Nivel calculado: {level}")
             
-            # Crear imagen del perfil - SIN guild_config
+            # Crear imagen del perfil
             profile_img = await self.create_profile_image(
                 member, user_data, float(balance), rank
             )
@@ -1138,8 +1160,13 @@ class LevelsSystem(commands.Cog):
         try:
             user_data = await get_user_level_data(member.id, ctx.guild.id)
             if not user_data:
-                await ctx.send("❌ Usuario no encontrado en la base de datos")
-                return
+                # Crear usuario si no existe
+                await update_user_xp(member.id, ctx.guild.id, 0, 0, 0)
+                user_data = await get_user_level_data(member.id, ctx.guild.id)
+                
+                if not user_data:
+                    await ctx.send("❌ Error al crear registro del usuario")
+                    return
             
             total_xp = user_data['xp']
             level, current_xp, next_level_xp = self.get_level_from_total_xp(total_xp)
