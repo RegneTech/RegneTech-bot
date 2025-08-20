@@ -189,7 +189,6 @@ async def connect_db():
         );
         """)
 
-        
         # === TABLAS DEL SISTEMA DE PARTNERS ===
         
         # Tabla para partners
