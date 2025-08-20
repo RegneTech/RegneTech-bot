@@ -14,19 +14,19 @@ CATEGORIAS = {
                 "uso": "`!xp` o `!xp @usuario`"
             },
             {
-                "comando": "!top [cantidad]",
+                "comando": "!lb [cantidad]",
                 "descripcion": "Ranking global de usuarios por XP",
-                "uso": "`!top` o `!top 2`"
+                "uso": "`!lb` o `!lb 2`"
             },
             {
-                "comando": "!top_semanal",
+                "comando": "!lb s",
                 "descripcion": "Top usuarios con más XP esta semana",
-                "uso": "`!top_semanal`"
+                "uso": "`!lb s`"
             },
             {
-                "comando": "!top_mensual",
+                "comando": "!lb m",
                 "descripcion": "Top usuarios con más XP este mes",
-                "uso": "`!top_mensual`"
+                "uso": "`!lb m`"
             }
         ]
     },
