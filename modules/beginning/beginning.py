@@ -556,8 +556,8 @@ class Verify(commands.Cog):
         )
         
         embed.add_field(
-            name="【🎯 NUEVO ROL】", 
-            value="Descripción personalizada para el nuevo rol agregado al sistema de autoroles.",
+            name="【✨ PARTNER PING】", 
+            value="Recibe notificaciones cada vez que haya un nuevo partner para poder ver lo que ofrecen en otros servidores.",
             inline=False
         )
         
@@ -726,7 +726,7 @@ class AutoRolesView(discord.ui.View):
                 ephemeral=True
             )
 
-    @discord.ui.button(label="【🎯】", style=discord.ButtonStyle.gray, custom_id="nuevo_role")
+    @discord.ui.button(label="【✨】", style=discord.ButtonStyle.gray, custom_id="nuevo_role")
     async def nuevo_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         role = interaction.guild.get_role(self.nuevo_role_id)
         
