@@ -683,7 +683,7 @@ async def get_invites_stats(guild_id: int) -> dict:
             'unique_inviters': 0,
             'top_inviter': None,
             'top_inviter_count': 0
-        }
+        } 
 
 # ==========================================
 # FUNCIONES PARA EL SISTEMA DE NIVELES
