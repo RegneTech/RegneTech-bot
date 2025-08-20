@@ -13,6 +13,7 @@ class Verify(commands.Cog):
         self.VERIFIED_ROLE_ID = 1400106792196898888
         self.RESENADOR_ROLE_ID = 1400106792196898891
         self.BUMPEADOR_ROLE_ID = 1400106792196898892
+        self.NUEVO_ROLE_ID = 1406641834553380884  # Nuevo rol agregado
         
         # Diccionario de roles por nivel (ordenado de mayor a menor para mostrar correctamente)
         self.LEVEL_ROLES = {
@@ -543,14 +544,20 @@ class Verify(commands.Cog):
         )
         
         embed.add_field(
-            name="【📚 𝚁𝙴𝚂𝙴𝙽̃𝙰𝙳𝙾𝚁】",
+            name="【📚 RESEÑADOR】",
             value="Recibe notificaciones cada vez que haya nuevas reseñas disponibles para completar y ganar dinero real.",
             inline=False
         )
         
         embed.add_field(
-            name="【🚀 𝙱𝚄𝙼𝙿𝙴𝙰𝙳𝙾𝚁】", 
+            name="【🚀 BUMPEADOR】", 
             value="Ayuda a hacer crecer el servidor y recibe notificaciones cuando sea momento de hacer bump en el servidor.",
+            inline=False
+        )
+        
+        embed.add_field(
+            name="【🎯 NUEVO ROL】", 
+            value="Descripción personalizada para el nuevo rol agregado al sistema de autoroles.",
             inline=False
         )
         
@@ -562,7 +569,7 @@ class Verify(commands.Cog):
             icon_url=guild.icon.url if guild.icon else None
         )
         
-        view = AutoRolesView(self.RESENADOR_ROLE_ID, self.BUMPEADOR_ROLE_ID)
+        view = AutoRolesView(self.RESENADOR_ROLE_ID, self.BUMPEADOR_ROLE_ID, self.NUEVO_ROLE_ID)
         await channel.send(embed=embed, view=view)
 
     # Comandos individuales
@@ -643,10 +650,11 @@ class Verify(commands.Cog):
         await loading_msg.edit(content="", embed=embed)
 
 class AutoRolesView(discord.ui.View):
-    def __init__(self, resenador_role_id, bumpeador_role_id):
+    def __init__(self, resenador_role_id, bumpeador_role_id, nuevo_role_id):
         super().__init__(timeout=None)
         self.resenador_role_id = resenador_role_id
         self.bumpeador_role_id = bumpeador_role_id
+        self.nuevo_role_id = nuevo_role_id
 
     @discord.ui.button(label="【📚】", style=discord.ButtonStyle.gray, custom_id="resenador_role")
     async def resenador_button(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -705,6 +713,41 @@ class AutoRolesView(discord.ui.View):
                 await interaction.user.add_roles(role)
                 await interaction.response.send_message(
                     f"✅ ¡Te has asignado el rol **{role.name}**! Ahora recibirás notificaciones para ayudar con el crecimiento del servidor.",
+                    ephemeral=True
+                )
+        except discord.Forbidden:
+            await interaction.response.send_message(
+                "❌ Error: No tengo permisos para gestionar este rol.", 
+                ephemeral=True
+            )
+        except Exception as e:
+            await interaction.response.send_message(
+                f"❌ Error inesperado: {str(e)}", 
+                ephemeral=True
+            )
+
+    @discord.ui.button(label="【🎯】", style=discord.ButtonStyle.gray, custom_id="nuevo_role")
+    async def nuevo_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role = interaction.guild.get_role(self.nuevo_role_id)
+        
+        if not role:
+            await interaction.response.send_message(
+                "❌ Error: No se pudo encontrar el nuevo rol.", 
+                ephemeral=True
+            )
+            return
+        
+        try:
+            if role in interaction.user.roles:
+                await interaction.user.remove_roles(role)
+                await interaction.response.send_message(
+                    f"❌ Te has quitado el rol **{role.name}**.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.user.add_roles(role)
+                await interaction.response.send_message(
+                    f"✅ ¡Te has asignado el rol **{role.name}**!",
                     ephemeral=True
                 )
         except discord.Forbidden:
