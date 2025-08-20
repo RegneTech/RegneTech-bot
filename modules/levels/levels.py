@@ -246,6 +246,11 @@ class LevelsSystem(commands.Cog):
             is_milestone = new_level % 10 == 0
 
             if is_milestone:
+                role = None
+                if new_level in self.level_roles:
+                    role_id = self.level_roles[new_level]
+                    role = member.guild.get_role(role_id)
+
                 embed = discord.Embed(
                     title="🎉 ¡NIVEL ALCANZADO!",
                     description=f"Nivel alcanzado: **{new_level}**",
@@ -254,6 +259,10 @@ class LevelsSystem(commands.Cog):
 
                 # Asignar rol correspondiente
                 await self.assign_level_role(member, new_level)
+
+                # Agregar campo con el rol
+                if role:
+                    embed.add_field(name="🎭 Rol obtenido", value=role.mention, inline=False)
 
             else:
                 embed = discord.Embed(
@@ -271,6 +280,8 @@ class LevelsSystem(commands.Cog):
 
         except Exception as e:
             print(f"Error en handle_level_up: {e}")
+
+
     
     async def assign_level_role(self, member: discord.Member, level: int):
         """Asigna el rol correspondiente al nivel y elimina el anterior"""
