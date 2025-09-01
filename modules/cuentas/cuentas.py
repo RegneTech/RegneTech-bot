@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 
-class ChannelControl(commands.Cog):
+class Cuentas(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
     
@@ -15,7 +15,7 @@ class ChannelControl(commands.Cog):
             # Crear el embed
             embed = discord.Embed(
                 title="Disney Streaming Account",
-                color=0x1e3a8a  # Azul marino
+                color=0x1e3a8a
             )
             
             # Agregar imagen al embed (reemplaza con tu URL de imagen)
@@ -83,4 +83,4 @@ class DisneyButtonView(discord.ui.View):
         await interaction.response.send_message(info_message, ephemeral=True)
 
 async def setup(bot: commands.Bot):
-    await bot.add_cog(ChannelControl(bot))
+    await bot.add_cog(Cuentas(bot))
