@@ -120,35 +120,11 @@ class Cuentas(commands.Cog):
             return
         
         try:
-            # Crear el embed
+            # Crear el embed simple
             embed = discord.Embed(
-                title="🏰 Disney+ Streaming Account",
-                description="",
-                color=0x003E78  # Color azul Disney
+                description="**Cuenta de Disney Plus Lifetime ⇨ 1€**",
+                color=0x000000  # Color negro
             )
-            
-            # Campo principal con información del producto
-            embed.add_field(
-                name="💫 Oferta Especial",
-                value="**Disney+ ⚡ Lifetime ⇨ 1€**\n\n" +
-                      "✨ **Características:**\n" +
-                      "• Acceso completo a Disney+\n" +
-                      "• Todas las películas y series\n" +
-                      "• Calidad HD/4K disponible\n" +
-                      "• Compatible con múltiples dispositivos\n" +
-                      "• Entrega inmediata\n" +
-                      "• Soporte garantizado",
-                inline=False
-            )
-            
-            # Footer con call to action
-            embed.set_footer(
-                text="🎯 Usa los botones de abajo para comprar u obtener más información",
-                icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None
-            )
-            
-            # Timestamp
-            embed.timestamp = discord.utils.utcnow()
             
             # Crear la vista con los botones (usando emojis encontrados)
             view = DisneyButtonView(
