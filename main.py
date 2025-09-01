@@ -2,7 +2,7 @@ import os
 import asyncio
 from discord.ext import commands
 from dotenv import load_dotenv
-from database import connect_db   # 👈 Importar la función de conexión
+from database import connect_db
 
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -36,7 +36,8 @@ MODULES = [
     "modules.beginning.beginning",
     "modules.economia.sorteos",
     "modules.user.user",
-    "modules.admin.partner"
+    "modules.admin.partner",
+    "modules.cuentas.cuentas",
 ]
 
 # Cargar módulos automáticamente (ASYNC)
