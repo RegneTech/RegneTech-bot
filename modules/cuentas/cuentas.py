@@ -4,10 +4,24 @@ from discord.ext import commands
 class Cuentas(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.embed_sent = False  # Para evitar enviar múltiples veces
     
     @commands.Cog.listener()
     async def on_ready(self):
         """Evento que se ejecuta cuando el bot está listo"""
+        if not self.embed_sent:
+            await self.send_disney_embed()
+            self.embed_sent = True
+    
+    @commands.command(name="send_disney")
+    @commands.has_permissions(administrator=True)
+    async def send_disney_manual(self, ctx):
+        """Comando manual para enviar el embed de Disney"""
+        await self.send_disney_embed()
+        await ctx.message.delete()  # Borra el comando
+    
+    async def send_disney_embed(self):
+        """Función para enviar el embed de Disney"""
         channel_id = 1412183751836045393
         channel = self.bot.get_channel(channel_id)
         
@@ -15,23 +29,32 @@ class Cuentas(commands.Cog):
             # Crear el embed
             embed = discord.Embed(
                 title="Disney Streaming Account",
-                color=0x1e3a8a
+                color=0x1e3a8a  # Azul marino
             )
             
-            # Agregar imagen al embed (reemplaza con tu URL de imagen)
-            embed.set_image(url="resources/images/Disney.png")
-
+            # Agregar imagen al embed
+            embed.set_image(url="attachment://Disney.png")
+            
             # Agregar el texto debajo de la imagen
             embed.add_field(
                 name="",
-                value="Disney ┃ Lifetime ⇨ 1,€",
+                value="Disney ┃ Lifetime ⇨ 1€",
                 inline=False
             )
             
             # Crear la vista con los botones
             view = DisneyButtonView()
             
-            await channel.send(embed=embed, view=view)
+            # Enviar con archivo adjunto
+            try:
+                file = discord.File("resources/images/Disney.png", filename="Disney.png")
+                await channel.send(file=file, embed=embed, view=view)
+            except FileNotFoundError:
+                # Si no encuentra el archivo, envía sin imagen
+                embed.set_image(url="")
+                await channel.send(embed=embed, view=view)
+            except Exception as e:
+                print(f"Error enviando embed: {e}")
 
 class DisneyButtonView(discord.ui.View):
     def __init__(self):
