@@ -16,9 +16,9 @@ class Cuentas(commands.Cog):
         
         # Buscar si ya existen los emojis
         for emoji in guild.emojis:
-            if emoji.name == "disney_comprar":
+            if emoji.name == "comprar":
                 self.comprar_emoji = emoji
-            elif emoji.name == "disney_info":
+            elif emoji.name == "info":
                 self.info_emoji = emoji
         
         # Si no existen, crearlos
@@ -27,7 +27,7 @@ class Cuentas(commands.Cog):
                 # Asegúrate de que tienes estos archivos en tu proyecto de Railway
                 with open('resources/emojis/comprar.png', 'rb') as f:
                     self.comprar_emoji = await guild.create_custom_emoji(
-                        name='disney_comprar',
+                        name='comprar',
                         image=f.read()
                     )
             except FileNotFoundError:
@@ -41,7 +41,7 @@ class Cuentas(commands.Cog):
             try:
                 with open('resources/emojis/info.png', 'rb') as f:
                     self.info_emoji = await guild.create_custom_emoji(
-                        name='disney_info',
+                        name='info',
                         image=f.read()
                     )
             except FileNotFoundError:
@@ -76,18 +76,18 @@ class Cuentas(commands.Cog):
             # Crear el embed
             embed = discord.Embed(
                 title="Disney Streaming Account",
-                color=0x1e3a8a  # Azul marino
+                color=0x003E78  # Color personalizado #003E78
             )
             
-            # Agregar imagen al embed
-            embed.set_image(url="attachment://Disney.png")
-            
-            # Agregar el texto debajo de la imagen
+            # Agregar el texto
             embed.add_field(
                 name="",
                 value="Disney ┃ Lifetime ⇨ 1€",
                 inline=False
             )
+            
+            # Agregar imagen debajo del texto
+            embed.set_image(url="attachment://Disney.png")
             
             # Crear la vista con los botones
             view = DisneyButtonView(self.comprar_emoji, self.info_emoji)
