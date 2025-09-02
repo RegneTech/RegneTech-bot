@@ -55,7 +55,7 @@ class Cuentas(commands.Cog):
                 'color': 0xFF0000,
                 'nombre': 'YouTube Premium',
                 'emoji': '▶️',
-                'imagen': 'YouTube.png'
+                'imagen': 'Youtube.png'
             },
             'hbomax': {
                 'channel_id': 1412493526637477890,
