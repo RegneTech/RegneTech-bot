@@ -122,29 +122,9 @@ class Cuentas(commands.Cog):
         try:
             # Crear el embed
             embed = discord.Embed(
-                title="🏰 Disney+ Streaming Account",
+                title="**Disney Plus Lifetime ⇨ 1€**",
                 description="",
-                color=0x003E78  # Color azul Disney
-            )
-            
-            # Campo principal con información del producto
-            embed.add_field(
-                name="💫 Oferta Especial",
-                value="**Disney+ ⚡ Lifetime ⇨ 1€**\n\n" +
-                      "✨ **Características:**\n" +
-                      "• Acceso completo a Disney+\n" +
-                      "• Todas las películas y series\n" +
-                      "• Calidad HD/4K disponible\n" +
-                      "• Compatible con múltiples dispositivos\n" +
-                      "• Entrega inmediata\n" +
-                      "• Soporte garantizado",
-                inline=False
-            )
-            
-            # Footer con call to action
-            embed.set_footer(
-                text="🎯 Usa los botones de abajo para comprar u obtener más información",
-                icon_url=self.bot.user.avatar.url if self.bot.user.avatar else None
+                color=0x003E78
             )
             
             # Timestamp
@@ -204,7 +184,7 @@ class DisneyButtonView(discord.ui.View):
         label="Comprar", 
         style=discord.ButtonStyle.secondary, 
         custom_id="disney_comprar",
-        emoji="🛒"  # Se actualizará en update_button_emojis
+        emoji="🛒"
     )
     async def comprar_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
@@ -358,7 +338,7 @@ class DisneyButtonView(discord.ui.View):
         label="Información", 
         style=discord.ButtonStyle.secondary, 
         custom_id="disney_info",
-        emoji="ℹ️"  # Se actualizará en update_button_emojis
+        emoji="ℹ️"
     )
     async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
