@@ -86,7 +86,7 @@ class Cuentas(commands.Cog):
                     self.info_emoji = emoji
                     logger.info(f"✅ Emoji 'info' encontrado: {emoji}")
         
-        # Si no los encuentra, mantener los predeterminados
+        # Si no los encuentra, mantener los fallback
         if isinstance(self.comprar_emoji, str):
             logger.warning("⚠️ Emoji personalizado 'comprar' no encontrado, usando 🛒")
         if isinstance(self.info_emoji, str):
@@ -335,30 +335,36 @@ class ServiceButtonView(discord.ui.View):
         self.info_emoji = info_emoji or "ℹ️"
         self.staff_role_id = staff_role_id
         
-        # Actualizar los emojis en los botones
-        self.update_button_emojis()
+        # Crear los botones con los emojis correctos desde el inicio
+        self.clear_items()  # Limpiar botones por defecto
+        self.add_buttons_with_custom_emojis()
     
-    def update_button_emojis(self):
-        """Actualizar los emojis de los botones"""
-        for item in self.children:
-            if isinstance(item, discord.ui.Button):
-                if item.custom_id == f"{self.servicio_key}_comprar":
-                    item.emoji = self.comprar_emoji
-                elif item.custom_id == f"{self.servicio_key}_info":
-                    item.emoji = self.info_emoji
-    
-    @discord.ui.button(
-        label="Comprar", 
-        style=discord.ButtonStyle.secondary, 
-        custom_id="service_comprar",
-        emoji="🛒"
-    )
-    async def comprar_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Actualizar custom_id dinámicamente
-        button.custom_id = f"{self.servicio_key}_comprar"
-        # Actualizar emoji al emoji personalizado
-        button.emoji = self.comprar_emoji
+    def add_buttons_with_custom_emojis(self):
+        """Crear los botones con los emojis personalizados"""
+        # Botón de comprar
+        comprar_btn = discord.ui.Button(
+            label="Comprar",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"{self.servicio_key}_comprar",
+            emoji=self.comprar_emoji
+        )
+        comprar_btn.callback = self.comprar_button_callback
         
+        # Botón de información
+        info_btn = discord.ui.Button(
+            label="Información",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"{self.servicio_key}_info",
+            emoji=self.info_emoji
+        )
+        info_btn.callback = self.info_button_callback
+        
+        # Añadir los botones a la vista
+        self.add_item(comprar_btn)
+        self.add_item(info_btn)
+    
+    async def comprar_button_callback(self, interaction: discord.Interaction):
+        """Callback para el botón de comprar"""
         try:
             # Defer la respuesta para tener más tiempo
             await interaction.response.defer(ephemeral=True)
@@ -506,16 +512,8 @@ class ServiceButtonView(discord.ui.View):
             except:
                 pass
     
-    @discord.ui.button(
-        label="Información", 
-        style=discord.ButtonStyle.secondary, 
-        custom_id="service_info",
-        emoji="ℹ️"
-    )
-    async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Actualizar custom_id dinámicamente
-        button.custom_id = f"{self.servicio_key}_info"
-        
+    async def info_button_callback(self, interaction: discord.Interaction):
+        """Callback para el botón de información"""
         try:
             # Crear embed informativo detallado
             info_embed = discord.Embed(
