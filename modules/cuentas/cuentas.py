@@ -36,7 +36,7 @@ class Cuentas(commands.Cog):
             'netflix': {
                 'channel_id': 1412493281610305628,
                 'precio': 1,
-                'color': 0x1c1c1c,
+                'color': 0x000000,
                 'nombre': 'Netflix',
                 'emoji': '📺',
                 'imagen': 'Netflix.png'
