@@ -127,9 +127,6 @@ class Cuentas(commands.Cog):
                 color=0x003E78
             )
             
-            # Timestamp
-            embed.timestamp = discord.utils.utcnow()
-            
             # Crear la vista con los botones (usando emojis encontrados)
             view = DisneyButtonView(
                 comprar_emoji=self.comprar_emoji,
@@ -344,109 +341,15 @@ class DisneyButtonView(discord.ui.View):
         try:
             # Crear embed informativo detallado
             info_embed = discord.Embed(
-                title="📋 Disney+ Lifetime - Información Completa",
-                description="Toda la información que necesitas saber sobre nuestro servicio",
-                color=0x003E78
+                title="Disney Plus Lifetime - Información",
+                description=(
+                    "El producto que ofrecemos es **lifetime**, lo que significa que solo se paga una vez y será tuyo para siempre. "
+                    "Su precio es de **1 euro**. Al momento de realizar la compra, se abrirá automáticamente un ticket para que el **Owner** "
+                    "pueda atenderte de manera personalizada y entregarte tu cuenta lo antes posible. Ten en cuenta que al efectuar la compra "
+                    "estás aceptando nuestros **Términos y Condiciones**."
+                ),
+                color=0x003E78  
             )
-            
-            # Información de precio
-            info_embed.add_field(
-                name="💰 Precio y Pago",
-                value="**1€** - Pago único\n" +
-                      "💳 Métodos: PayPal, Stripe, Crypto\n" +
-                      "🔒 Transacciones 100% seguras",
-                inline=True
-            )
-            
-            # Información de duración
-            info_embed.add_field(
-                name="⏰ Duración",
-                value="**Lifetime** - Para siempre\n" +
-                      "♾️ Sin renovaciones\n" +
-                      "🎯 Una sola compra",
-                inline=True
-            )
-            
-            # Información de entrega
-            info_embed.add_field(
-                name="🚀 Entrega",
-                value="**Instantánea** - Al momento\n" +
-                      "📧 Datos por mensaje privado\n" +
-                      "⚡ Acceso inmediato",
-                inline=True
-            )
-            
-            # Características del servicio
-            info_embed.add_field(
-                name="🎬 Características Incluidas",
-                value="• ✅ Acceso completo a Disney+\n" +
-                      "• 🎭 Todas las películas y series\n" +
-                      "• 🎨 Contenido original exclusivo\n" +
-                      "• 📱 Compatible con todos los dispositivos\n" +
-                      "• 🌍 Funciona en cualquier región\n" +
-                      "• 🔊 Audio y subtítulos en varios idiomas",
-                inline=False
-            )
-            
-            # Calidad y soporte
-            info_embed.add_field(
-                name="⭐ Calidad Premium",
-                value="• 🎥 Resolución hasta 4K UHD\n" +
-                      "• 🔊 Audio Dolby Atmos\n" +
-                      "• 📺 Streaming sin interrupciones\n" +
-                      "• 💾 Descargas para ver offline",
-                inline=True
-            )
-            
-            # Soporte y garantías
-            info_embed.add_field(
-                name="🛡️ Garantías y Soporte",
-                value="• 🔧 Soporte técnico incluido\n" +
-                      "• 🔄 Reemplazos gratuitos si es necesario\n" +
-                      "• 👥 Atención personalizada\n" +
-                      "• ⏱️ Respuesta en menos de 24h",
-                inline=True
-            )
-            
-            # Términos importantes
-            info_embed.add_field(
-                name="⚠️ Términos y Condiciones",
-                value="• 📝 Al comprar aceptas nuestros T&C\n" +
-                      "• 👤 Cuenta personal e intransferible\n" +
-                      "• 🔐 Cambio de credenciales prohibido\n" +
-                      "• 🤝 Uso responsable requerido\n" +
-                      "• 💼 Solo para uso personal",
-                inline=False
-            )
-            
-            # Proceso de compra
-            info_embed.add_field(
-                name="🛒 ¿Cómo Comprar?",
-                value="1️⃣ Haz clic en **'Comprar'**\n" +
-                      "2️⃣ Se abrirá un ticket privado\n" +
-                      "3️⃣ El staff te contactará\n" +
-                      "4️⃣ Realizas el pago\n" +
-                      "5️⃣ Recibes tu cuenta al instante",
-                inline=True
-            )
-            
-            # FAQ rápido
-            info_embed.add_field(
-                name="❓ Preguntas Frecuentes",
-                value="**¿Es legal?** ✅ Totalmente legal\n" +
-                      "**¿Funciona en mi país?** 🌍 Sí, mundial\n" +
-                      "**¿Cuánto dura?** ♾️ Para siempre\n" +
-                      "**¿Hay soporte?** 💬 Sí, 24/7\n" +
-                      "**¿Es seguro?** 🔒 100% seguro",
-                inline=True
-            )
-            
-            info_embed.set_footer(
-                text="¿Listo para disfrutar Disney+ para siempre? ¡Haz clic en Comprar! 🎬",
-                icon_url=interaction.client.user.avatar.url if interaction.client.user.avatar else None
-            )
-            
-            info_embed.set_thumbnail(url="https://cdn.jsdelivr.net/gh/devicons/devicon/icons/disney/disney-original.svg")
             
             await interaction.response.send_message(embed=info_embed, ephemeral=True)
             
