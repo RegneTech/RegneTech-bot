@@ -127,17 +127,7 @@ class Cuentas(commands.Cog):
                 color=0x003E78  # Color azul Disney
             )
             
-            # Intentar configurar la imagen primero (arriba)
-            image_path = "resources/images/Disney.png"
-            file = None
-            if os.path.exists(image_path):
-                embed.set_image(url="attachment://Disney.png")
-                file = discord.File(image_path, filename="Disney.png")
-                logger.info("✅ Imagen Disney.png configurada")
-            else:
-                logger.info("ℹ️ Imagen Disney.png no encontrada, enviando sin imagen")
-            
-            # Campo principal con información del producto (texto abajo de la imagen)
+            # Campo principal con información del producto
             embed.add_field(
                 name="💫 Oferta Especial",
                 value="**Disney+ ⚡ Lifetime ⇨ 1€**\n\n" +
@@ -168,10 +158,14 @@ class Cuentas(commands.Cog):
                 staff_role_id=self.staff_role_id
             )
             
-            # Enviar mensaje con imagen y embed
-            if file:
+            # Intentar enviar con imagen si existe
+            image_path = "resources/images/Disney.png"
+            if os.path.exists(image_path):
+                embed.set_image(url="attachment://Disney.png")
+                file = discord.File(image_path, filename="Disney.png")
                 message = await channel.send(file=file, embed=embed, view=view)
             else:
+                logger.info("ℹ️ Imagen Disney.png no encontrada, enviando sin imagen")
                 message = await channel.send(embed=embed, view=view)
             
             # Hacer que la vista sea persistente
@@ -208,7 +202,7 @@ class DisneyButtonView(discord.ui.View):
     
     @discord.ui.button(
         label="Comprar", 
-        style=discord.ButtonStyle.secondary,  # Cambiado de success a secondary
+        style=discord.ButtonStyle.secondary, 
         custom_id="disney_comprar",
         emoji="🛒"  # Se actualizará en update_button_emojis
     )
