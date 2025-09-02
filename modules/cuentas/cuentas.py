@@ -86,7 +86,7 @@ class Cuentas(commands.Cog):
                     self.info_emoji = emoji
                     logger.info(f"✅ Emoji 'info' encontrado: {emoji}")
         
-        # Si no los encuentra, mantener los fallback
+        # Si no los encuentra, mantener los predeterminados
         if isinstance(self.comprar_emoji, str):
             logger.warning("⚠️ Emoji personalizado 'comprar' no encontrado, usando 🛒")
         if isinstance(self.info_emoji, str):
