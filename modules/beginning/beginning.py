@@ -439,10 +439,9 @@ class AutoRolesView(discord.ui.View):
             )
 
 class VerificationView(discord.ui.View):
-    def __init__(self, verified_role_id, auto_role_id, rules_channel_id, rango_prefix, cog):
+    def __init__(self, verified_role_id, rules_channel_id, rango_prefix, cog):
         super().__init__(timeout=None)
         self.verified_role_id = verified_role_id
-        self.auto_role_id = auto_role_id
         self.rules_channel_id = rules_channel_id
         self.rango_prefix = rango_prefix
         self.cog = cog

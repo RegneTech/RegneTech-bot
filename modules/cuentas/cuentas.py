@@ -12,10 +12,63 @@ class Cuentas(commands.Cog):
         self.bot = bot
         self.comprar_emoji = "🛒"  # Fallback por defecto
         self.info_emoji = "ℹ️"     # Fallback por defecto
-        self.disney_channel_id = 1412183751836045393
         self.staff_role_id = 1400106792280658070
         self.setup_complete = False
-        self.embed_sent = False  # Para evitar envío múltiple
+        
+        # Configuración de todos los servicios
+        self.servicios = {
+            'disney': {
+                'channel_id': 1412183751836045393,
+                'precio': 1,
+                'color': 0x003E78,
+                'nombre': 'Disney Plus',
+                'emoji': '🎬',
+                'imagen': 'Disney.png'
+            },
+            'spotify': {
+                'channel_id': 1412492877291851796,
+                'precio': 1,
+                'color': 0x1DB954,
+                'nombre': 'Spotify',
+                'emoji': '🎵',
+                'imagen': 'Spotify.png'
+            },
+            'netflix': {
+                'channel_id': 1412493281610305628,
+                'precio': 1,
+                'color': 0xE50914,
+                'nombre': 'Netflix',
+                'emoji': '📺',
+                'imagen': 'Netflix.png'
+            },
+            'crunchyroll': {
+                'channel_id': 1412493355287576596,
+                'precio': 1,
+                'color': 0xFF6600,
+                'nombre': 'Crunchyroll',
+                'emoji': '🍜',
+                'imagen': 'Crunchyroll.png'
+            },
+            'youtube': {
+                'channel_id': 1412493434945540147,
+                'precio': 3,
+                'color': 0xFF0000,
+                'nombre': 'YouTube Premium',
+                'emoji': '▶️',
+                'imagen': 'YouTube.png'
+            },
+            'hbomax': {
+                'channel_id': 1412493526637477890,
+                'precio': 1,
+                'color': 0x673AB7,
+                'nombre': 'HBO Max',
+                'emoji': '🎭',
+                'imagen': 'HBOMax.png'
+            }
+        }
+        
+        # Control de envíos para evitar duplicados
+        self.embeds_enviados = {servicio: False for servicio in self.servicios}
     
     async def find_emojis(self):
         """Buscar los emojis personalizados en el servidor"""
@@ -39,48 +92,188 @@ class Cuentas(commands.Cog):
         if isinstance(self.info_emoji, str):
             logger.warning("⚠️ Emoji personalizado 'info' no encontrado, usando ℹ️")
     
-    @commands.Cog.listener()
-    async def on_ready(self):
-        """Evento que se ejecuta cuando el bot está listo"""
-        if self.setup_complete:
-            return  # Evitar múltiples ejecuciones
+    async def cog_load(self):
+        """Configuración automática al cargar el cog (similar a beginning.py)"""
+        logger.info("🔧 Configurando módulo de cuentas automáticamente...")
         
-        logger.info("🔧 Configurando módulo de cuentas...")
-        
-        # Esperar un poco para asegurar que todo esté cargado
-        await asyncio.sleep(2)
+        await self.bot.wait_until_ready()
+        await asyncio.sleep(3)  # Delay para estabilidad
         
         try:
             # Buscar emojis personalizados
             await self.find_emojis()
             logger.info("✅ Emojis configurados")
             
-            # Enviar embed solo una vez
-            if not self.embed_sent:
-                channel = self.bot.get_channel(self.disney_channel_id)
-                if channel:
-                    await self.send_disney_embed()
-                    self.embed_sent = True
-                    logger.info("✅ Embed de Disney enviado")
-                else:
-                    logger.error(f"❌ Canal con ID {self.disney_channel_id} no encontrado")
-                
+            # Configurar todos los servicios
+            await self.setup_all_services()
+            logger.info("✅ Todos los servicios configurados automáticamente")
+            
         except Exception as e:
-            logger.error(f"❌ Error en on_ready del módulo cuentas: {e}")
+            logger.error(f"❌ Error en cog_load del módulo cuentas: {e}")
         finally:
             self.setup_complete = True
     
-    @commands.command(name="send_disney")
+    @commands.Cog.listener()
+    async def on_ready(self):
+        """Backup para configuración automática"""
+        if not hasattr(self, '_auto_setup_done'):
+            self._auto_setup_done = True
+            await asyncio.sleep(5)  # Delay más largo para backup
+            
+            try:
+                if not self.setup_complete:
+                    await self.find_emojis()
+                    await self.setup_all_services()
+                    logger.info("✅ Servicios configurados (on_ready backup)")
+            except Exception as e:
+                logger.error(f"❌ Error en on_ready backup: {e}")
+    
+    async def setup_all_services(self):
+        """Configura todos los servicios automáticamente"""
+        for servicio_key, config in self.servicios.items():
+            try:
+                if not self.embeds_enviados[servicio_key]:
+                    channel = self.bot.get_channel(config['channel_id'])
+                    if channel:
+                        await self.send_service_embed(servicio_key, config)
+                        self.embeds_enviados[servicio_key] = True
+                        logger.info(f"✅ Embed de {config['nombre']} enviado")
+                        await asyncio.sleep(1)  # Delay entre envíos
+                    else:
+                        logger.error(f"❌ Canal {config['channel_id']} para {config['nombre']} no encontrado")
+            except Exception as e:
+                logger.error(f"❌ Error configurando {config['nombre']}: {e}")
+    
+    async def send_service_embed(self, servicio_key, config):
+        """Función para enviar el embed de un servicio específico"""
+        channel = self.bot.get_channel(config['channel_id'])
+        
+        if not channel:
+            logger.error(f"❌ Canal {config['channel_id']} no encontrado para {config['nombre']}")
+            return
+        
+        try:
+            # Limpiar canal primero
+            try:
+                await channel.purge(limit=100)
+                logger.info(f"🧹 Canal {config['nombre']} limpiado")
+            except discord.Forbidden:
+                logger.warning(f"⚠️ Sin permisos para limpiar canal {config['nombre']}")
+            except Exception as e:
+                logger.warning(f"⚠️ Error limpiando canal {config['nombre']}: {e}")
+            
+            # Crear el embed
+            embed = discord.Embed(
+                title=f"**{config['nombre']} Lifetime ⇨ {config['precio']}€**",
+                description="",
+                color=config['color']
+            )
+            
+            # Crear la vista con los botones
+            view = ServiceButtonView(
+                servicio_key=servicio_key,
+                config=config,
+                comprar_emoji=self.comprar_emoji,
+                info_emoji=self.info_emoji,
+                staff_role_id=self.staff_role_id
+            )
+            
+            # Intentar enviar con imagen si existe
+            image_path = f"resources/images/{config['imagen']}"
+            if os.path.exists(image_path):
+                embed.set_image(url=f"attachment://{config['imagen']}")
+                file = discord.File(image_path, filename=config['imagen'])
+                message = await channel.send(file=file, embed=embed, view=view)
+            else:
+                logger.info(f"ℹ️ Imagen {config['imagen']} no encontrada, enviando sin imagen")
+                message = await channel.send(embed=embed, view=view)
+            
+            # Hacer que la vista sea persistente
+            self.bot.add_view(view, message_id=message.id)
+            logger.info(f"✅ Embed de {config['nombre']} enviado exitosamente (ID: {message.id})")
+            
+        except discord.HTTPException as e:
+            logger.error(f"❌ Error HTTP enviando embed de {config['nombre']}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"❌ Error inesperado enviando embed de {config['nombre']}: {e}")
+            raise
+    
+    @commands.command(name="setup_services")
     @commands.has_permissions(administrator=True)
-    async def send_disney_manual(self, ctx):
-        """Comando manual para enviar el embed de Disney"""
+    async def setup_services_manual(self, ctx):
+        """Comando manual para configurar todos los servicios"""
+        loading_msg = await ctx.send("🔧 Configurando todos los servicios...")
+        
         try:
             await self.find_emojis()  # Actualizar emojis
-            await self.send_disney_embed()
+            
+            success_count = 0
+            error_count = 0
+            
+            for servicio_key, config in self.servicios.items():
+                try:
+                    await self.send_service_embed(servicio_key, config)
+                    self.embeds_enviados[servicio_key] = True
+                    success_count += 1
+                    await asyncio.sleep(1)
+                except Exception as e:
+                    logger.error(f"❌ Error configurando {config['nombre']}: {e}")
+                    error_count += 1
             
             embed = discord.Embed(
-                title="✅ Embed enviado",
-                description="El embed de Disney se envió correctamente",
+                title="📊 Configuración Completada",
+                color=0x00ff00 if error_count == 0 else 0xffaa00
+            )
+            
+            embed.add_field(
+                name="✅ Exitosos",
+                value=str(success_count),
+                inline=True
+            )
+            
+            embed.add_field(
+                name="❌ Errores", 
+                value=str(error_count),
+                inline=True
+            )
+            
+            embed.add_field(
+                name="📊 Total",
+                value=f"{success_count + error_count} servicios",
+                inline=True
+            )
+            
+            await loading_msg.edit(content="", embed=embed)
+            await ctx.message.delete()
+            
+        except Exception as e:
+            embed = discord.Embed(
+                title="❌ Error",
+                description=f"Error configurando servicios: {e}",
+                color=0xff0000
+            )
+            await loading_msg.edit(content="", embed=embed)
+            logger.error(f"❌ Error en setup_services_manual: {e}")
+    
+    @commands.command(name="setup_single")
+    @commands.has_permissions(administrator=True)
+    async def setup_single_service(self, ctx, servicio: str = None):
+        """Comando para configurar un servicio específico"""
+        if not servicio or servicio not in self.servicios:
+            servicios_disponibles = ", ".join(self.servicios.keys())
+            await ctx.send(f"❌ Servicio no válido. Disponibles: {servicios_disponibles}")
+            return
+        
+        try:
+            await self.find_emojis()
+            config = self.servicios[servicio]
+            await self.send_service_embed(servicio, config)
+            self.embeds_enviados[servicio] = True
+            
+            embed = discord.Embed(
+                title="✅ Servicio configurado",
+                description=f"El embed de **{config['nombre']}** se envió correctamente",
                 color=0x00ff00
             )
             await ctx.send(embed=embed, delete_after=5)
@@ -89,11 +282,33 @@ class Cuentas(commands.Cog):
         except Exception as e:
             embed = discord.Embed(
                 title="❌ Error",
-                description=f"Error enviando embed: {e}",
+                description=f"Error configurando {servicio}: {e}",
                 color=0xff0000
             )
             await ctx.send(embed=embed, delete_after=10)
-            logger.error(f"❌ Error en send_disney_manual: {e}")
+            logger.error(f"❌ Error en setup_single_service: {e}")
+    
+    @commands.command(name="services_status")
+    @commands.has_permissions(administrator=True)
+    async def services_status(self, ctx):
+        """Muestra el estado de todos los servicios"""
+        embed = discord.Embed(
+            title="📊 Estado de Servicios",
+            color=0x00ffff
+        )
+        
+        for servicio_key, config in self.servicios.items():
+            channel = self.bot.get_channel(config['channel_id'])
+            status = "✅ Configurado" if self.embeds_enviados[servicio_key] else "❌ No configurado"
+            channel_status = "✅ Encontrado" if channel else "❌ No encontrado"
+            
+            embed.add_field(
+                name=f"{config['emoji']} {config['nombre']}",
+                value=f"**Estado:** {status}\n**Canal:** {channel_status}\n**Precio:** {config['precio']}€",
+                inline=True
+            )
+        
+        await ctx.send(embed=embed)
     
     @commands.command(name="refresh_emojis")
     @commands.has_permissions(administrator=True)
@@ -110,58 +325,14 @@ class Cuentas(commands.Cog):
             await ctx.message.delete()
         except Exception as e:
             await ctx.send(f"❌ Error actualizando emojis: {e}", delete_after=10)
-    
-    async def send_disney_embed(self):
-        """Función para enviar el embed de Disney"""
-        channel = self.bot.get_channel(self.disney_channel_id)
-        
-        if not channel:
-            logger.error(f"❌ Canal {self.disney_channel_id} no encontrado")
-            return
-        
-        try:
-            # Crear el embed
-            embed = discord.Embed(
-                title="**Disney Plus Lifetime ⇨ 1€**",
-                description="",
-                color=0x003E78
-            )
-            
-            # Crear la vista con los botones (usando emojis encontrados)
-            view = DisneyButtonView(
-                comprar_emoji=self.comprar_emoji,
-                info_emoji=self.info_emoji,
-                disney_channel_id=self.disney_channel_id,
-                staff_role_id=self.staff_role_id
-            )
-            
-            # Intentar enviar con imagen si existe
-            image_path = "resources/images/Disney.png"
-            if os.path.exists(image_path):
-                embed.set_image(url="attachment://Disney.png")
-                file = discord.File(image_path, filename="Disney.png")
-                message = await channel.send(file=file, embed=embed, view=view)
-            else:
-                logger.info("ℹ️ Imagen Disney.png no encontrada, enviando sin imagen")
-                message = await channel.send(embed=embed, view=view)
-            
-            # Hacer que la vista sea persistente
-            self.bot.add_view(view, message_id=message.id)
-            logger.info(f"✅ Embed de Disney enviado exitosamente (ID: {message.id})")
-            
-        except discord.HTTPException as e:
-            logger.error(f"❌ Error HTTP enviando embed: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"❌ Error inesperado enviando embed: {e}")
-            raise
 
-class DisneyButtonView(discord.ui.View):
-    def __init__(self, comprar_emoji=None, info_emoji=None, disney_channel_id=None, staff_role_id=None):
+class ServiceButtonView(discord.ui.View):
+    def __init__(self, servicio_key, config, comprar_emoji=None, info_emoji=None, staff_role_id=None):
         super().__init__(timeout=None)  # Vista persistente
+        self.servicio_key = servicio_key
+        self.config = config
         self.comprar_emoji = comprar_emoji or "🛒"
         self.info_emoji = info_emoji or "ℹ️"
-        self.disney_channel_id = disney_channel_id
         self.staff_role_id = staff_role_id
         
         # Actualizar los emojis en los botones
@@ -169,21 +340,23 @@ class DisneyButtonView(discord.ui.View):
     
     def update_button_emojis(self):
         """Actualizar los emojis de los botones"""
-        # Encontrar y actualizar los botones
         for item in self.children:
             if isinstance(item, discord.ui.Button):
-                if item.custom_id == "disney_comprar":
+                if item.custom_id == f"{self.servicio_key}_comprar":
                     item.emoji = self.comprar_emoji
-                elif item.custom_id == "disney_info":
+                elif item.custom_id == f"{self.servicio_key}_info":
                     item.emoji = self.info_emoji
     
     @discord.ui.button(
         label="Comprar", 
         style=discord.ButtonStyle.secondary, 
-        custom_id="disney_comprar",
+        custom_id="service_comprar",
         emoji="🛒"
     )
     async def comprar_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Actualizar custom_id dinámicamente
+        button.custom_id = f"{self.servicio_key}_comprar"
+        
         try:
             # Defer la respuesta para tener más tiempo
             await interaction.response.defer(ephemeral=True)
@@ -191,20 +364,20 @@ class DisneyButtonView(discord.ui.View):
             user = interaction.user
             guild = interaction.guild
             
-            # Verificar si ya tiene un ticket abierto
-            ticket_name = f"disney-{user.name.lower().replace(' ', '-')}"
+            # Verificar si ya tiene un ticket abierto para este servicio
+            ticket_name = f"{self.servicio_key}-{user.name.lower().replace(' ', '-')}"
             existing_ticket = discord.utils.get(guild.channels, name=ticket_name)
             
             if existing_ticket:
                 await interaction.followup.send(
-                    f"❌ Ya tienes un ticket abierto: {existing_ticket.mention}",
+                    f"❌ Ya tienes un ticket abierto para {self.config['nombre']}: {existing_ticket.mention}",
                     ephemeral=True
                 )
                 return
             
-            # Obtener el canal de Disney para crear el ticket debajo
-            disney_channel = guild.get_channel(self.disney_channel_id)
-            category = disney_channel.category if disney_channel else None
+            # Obtener el canal del servicio para crear el ticket debajo
+            service_channel = guild.get_channel(self.config['channel_id'])
+            category = service_channel.category if service_channel else None
             
             # Configurar permisos del ticket
             overwrites = {
@@ -243,14 +416,14 @@ class DisneyButtonView(discord.ui.View):
                 name=ticket_name,
                 overwrites=overwrites,
                 category=category,
-                topic=f"Ticket de Disney+ para {user.display_name} | ID: {user.id}",
-                position=disney_channel.position + 1 if disney_channel else None
+                topic=f"Ticket de {self.config['nombre']} para {user.display_name} | ID: {user.id}",
+                position=service_channel.position + 1 if service_channel else None
             )
             
             # Crear embed para el mensaje inicial del ticket
             ticket_embed = discord.Embed(
-                title="🎫 Nuevo Ticket - Disney+ Lifetime",
-                color=0x003E78,
+                title=f"🎫 Nuevo Ticket - {self.config['nombre']} Lifetime",
+                color=self.config['color'],
                 timestamp=discord.utils.utcnow()
             )
             
@@ -261,8 +434,8 @@ class DisneyButtonView(discord.ui.View):
             )
             
             ticket_embed.add_field(
-                name="🎬 Producto",
-                value="**Disney+ Lifetime**\n💰 Precio: **1€**\n⚡ Entrega: Inmediata",
+                name=f"{self.config['emoji']} Producto",
+                value=f"**{self.config['nombre']} Lifetime**\n💰 Precio: **{self.config['precio']}€**\n⚡ Entrega: Inmediata",
                 inline=True
             )
             
@@ -289,7 +462,7 @@ class DisneyButtonView(discord.ui.View):
             ticket_embed.set_thumbnail(url=user.avatar.url if user.avatar else user.default_avatar.url)
             
             # Mensaje de bienvenida
-            welcome_message = f"¡Hola {user.mention}! 👋 Bienvenido a tu ticket de Disney+.\n"
+            welcome_message = f"¡Hola {user.mention}! 👋 Bienvenido a tu ticket de {self.config['nombre']}.\n"
             if staff_role:
                 welcome_message += f"{staff_role.mention} Un cliente está esperando atención."
             
@@ -310,10 +483,10 @@ class DisneyButtonView(discord.ui.View):
             
             await interaction.followup.send(embed=success_embed, ephemeral=True)
             
-            logger.info(f"✅ Ticket creado para {user.name} (ID: {user.id}) - Canal: {ticket_channel.name}")
+            logger.info(f"✅ Ticket de {self.config['nombre']} creado para {user.name} (ID: {user.id}) - Canal: {ticket_channel.name}")
             
         except discord.HTTPException as e:
-            logger.error(f"❌ Error HTTP creando ticket: {e}")
+            logger.error(f"❌ Error HTTP creando ticket de {self.config['nombre']}: {e}")
             try:
                 await interaction.followup.send(
                     "❌ Error creando el ticket debido a permisos insuficientes. Contacta con un administrador.",
@@ -322,7 +495,7 @@ class DisneyButtonView(discord.ui.View):
             except:
                 pass
         except Exception as e:
-            logger.error(f"❌ Error inesperado creando ticket: {e}")
+            logger.error(f"❌ Error inesperado creando ticket de {self.config['nombre']}: {e}")
             try:
                 await interaction.followup.send(
                     "❌ Error inesperado. Por favor, contacta con un administrador.",
@@ -334,29 +507,32 @@ class DisneyButtonView(discord.ui.View):
     @discord.ui.button(
         label="Información", 
         style=discord.ButtonStyle.secondary, 
-        custom_id="disney_info",
+        custom_id="service_info",
         emoji="ℹ️"
     )
     async def info_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Actualizar custom_id dinámicamente
+        button.custom_id = f"{self.servicio_key}_info"
+        
         try:
             # Crear embed informativo detallado
             info_embed = discord.Embed(
-                title="Disney Plus Lifetime - Información",
+                title=f"{self.config['nombre']} Lifetime - Información",
                 description=(
-                    "El producto que ofrecemos es **lifetime**, lo que significa que solo se paga una vez y será tuyo para siempre. "
-                    "Su precio es de **1 euro**. Al momento de realizar la compra, se abrirá automáticamente un ticket para que el **Owner** "
-                    "pueda atenderte de manera personalizada y entregarte tu cuenta lo antes posible. Ten en cuenta que al efectuar la compra "
-                    "estás aceptando nuestros **Términos y Condiciones**."
+                    f"El producto que ofrecemos es **lifetime**, lo que significa que solo se paga una vez y será tuyo para siempre. "
+                    f"Su precio es de **{self.config['precio']} euro{'s' if self.config['precio'] > 1 else ''}**. Al momento de realizar la compra, se abrirá automáticamente un ticket para que el **Owner** "
+                    f"pueda atenderte de manera personalizada y entregarte tu cuenta lo antes posible. Ten en cuenta que al efectuar la compra "
+                    f"estás aceptando nuestros **Términos y Condiciones**."
                 ),
-                color=0x003E78  
+                color=self.config['color']
             )
             
             await interaction.response.send_message(embed=info_embed, ephemeral=True)
             
-            logger.info(f"ℹ️ Info mostrada a {interaction.user.name} (ID: {interaction.user.id})")
+            logger.info(f"ℹ️ Info de {self.config['nombre']} mostrada a {interaction.user.name} (ID: {interaction.user.id})")
             
         except Exception as e:
-            logger.error(f"❌ Error mostrando información: {e}")
+            logger.error(f"❌ Error mostrando información de {self.config['nombre']}: {e}")
             try:
                 await interaction.response.send_message(
                     "❌ Error mostrando información. Por favor, intenta nuevamente o contacta con el staff.",
