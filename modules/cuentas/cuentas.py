@@ -356,6 +356,8 @@ class ServiceButtonView(discord.ui.View):
     async def comprar_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         # Actualizar custom_id dinámicamente
         button.custom_id = f"{self.servicio_key}_comprar"
+        # Actualizar emoji al emoji personalizado
+        button.emoji = self.comprar_emoji
         
         try:
             # Defer la respuesta para tener más tiempo
